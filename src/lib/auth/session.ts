@@ -1,27 +1,35 @@
 import { SpotifyApiClient } from "../spotify/client";
 import type { AIMessage } from "../ai/types";
+import type { SpotifyUser } from "../spotify/types";
 
 export interface Session {
-  accessToken: string;
+  spDc: string;
   client: SpotifyApiClient;
   messages: AIMessage[];
+  profile: SpotifyUser | null;
 }
 
 const sessions = new Map<string, Session>();
 
-export function getOrCreateSession(accessToken: string): Session {
-  const existing = sessions.get(accessToken);
-  if (existing) return existing;
-
-  const session: Session = {
-    accessToken,
-    client: new SpotifyApiClient(accessToken),
+export function createSession(spDc: string): string {
+  const id = crypto.randomUUID();
+  sessions.set(id, {
+    spDc,
+    client: new SpotifyApiClient(spDc),
     messages: [],
-  };
-  sessions.set(accessToken, session);
-  return session;
+    profile: null,
+  });
+  return id;
 }
 
-export function deleteSession(accessToken: string): boolean {
-  return sessions.delete(accessToken);
+export function getSession(id: string): Session | undefined {
+  return sessions.get(id);
+}
+
+export function deleteSession(id: string): boolean {
+  return sessions.delete(id);
+}
+
+export function hasSession(id: string): boolean {
+  return sessions.has(id);
 }

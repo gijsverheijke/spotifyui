@@ -1,21 +1,149 @@
-import type { SpotifyClient, SpotifyUser } from "./types";
+import { createHmac } from "crypto";
+import type { SpotifyClient, SpotifyTokenResponse, SpotifyUser } from "./types";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
+// Use only the hardcoded TOTP secret (version 18) — skip Gitea HTTP fetch
+// to avoid slow/unreliable network calls and CORS issues.
+const TOTP_SECRET = new Uint8Array([
+  70, 60, 33, 57, 92, 120, 90, 33, 32, 62, 62, 55, 126, 93, 66, 35, 108, 68,
+]);
+const TOTP_VERSION = 18;
+
+const TOTP_STEP_SECONDS = 30;
+const TOTP_DIGITS = 6;
+
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+
 const SPOTIFY_API_BASE = "https://api.spotify.com/v1";
+const SPOTIFY_TOKEN_BASE = "https://open.spotify.com/";
 
 // ---------------------------------------------------------------------------
-// SpotifyApiClient — accepts an access token directly
+// TOTP generation (HOTP/TOTP with SHA1, 30s step, 6 digits)
+// ---------------------------------------------------------------------------
+
+export function totpFromSecret(secret: Uint8Array, now: Date): string {
+  // Transform: secret[i] ^= (i % 33) + 9
+  const transformed = new Uint8Array(secret.length);
+  for (let i = 0; i < secret.length; i++) {
+    transformed[i] = secret[i] ^ ((i % 33) + 9);
+  }
+
+  // Join transformed bytes as decimal strings
+  const key = transformed.reduce((acc, byte) => acc + String(byte), "");
+
+  // Standard HOTP with SHA1
+  const counter = Math.floor(now.getTime() / 1000 / TOTP_STEP_SECONDS);
+  const counterBuf = Buffer.alloc(8);
+  counterBuf.writeBigUInt64BE(BigInt(counter));
+
+  const hmac = createHmac("sha1", Buffer.from(key, "utf-8"));
+  hmac.update(counterBuf);
+  const hash = hmac.digest();
+
+  // Dynamic truncation
+  const offset = hash[hash.length - 1] & 0x0f;
+  const binCode =
+    ((hash[offset] & 0x7f) << 24) |
+    ((hash[offset + 1] & 0xff) << 16) |
+    ((hash[offset + 2] & 0xff) << 8) |
+    (hash[offset + 3] & 0xff);
+
+  const otp = binCode % 1_000_000;
+  return String(otp).padStart(TOTP_DIGITS, "0");
+}
+
+export function generateTOTP(now: Date): { code: string; version: number } {
+  const code = totpFromSecret(TOTP_SECRET, now);
+  return { code, version: TOTP_VERSION };
+}
+
+// ---------------------------------------------------------------------------
+// SpotifyApiClient
 // ---------------------------------------------------------------------------
 
 export class SpotifyApiClient implements SpotifyClient {
-  private accessToken: string;
+  private spDc: string;
+  private accessToken: string | null = null;
+  private tokenExpiresAt: number = 0;
+  private refreshPromise: Promise<string> | null = null;
   private userId: string | null = null;
 
-  constructor(accessToken: string) {
-    this.accessToken = accessToken;
+  constructor(spDc: string) {
+    this.spDc = spDc;
+  }
+
+  async getAccessToken(): Promise<string> {
+    // Return cached token if valid (with 60s buffer)
+    if (this.accessToken && Date.now() < this.tokenExpiresAt - 60_000) {
+      return this.accessToken;
+    }
+
+    // Dedup concurrent refresh calls
+    if (this.refreshPromise) {
+      return this.refreshPromise;
+    }
+
+    this.refreshPromise = this.fetchToken();
+    try {
+      const token = await this.refreshPromise;
+      return token;
+    } finally {
+      this.refreshPromise = null;
+    }
+  }
+
+  private async fetchToken(): Promise<string> {
+    const { code, version } = generateTOTP(new Date());
+
+    const params = new URLSearchParams({
+      reason: "init",
+      productType: "web-player",
+      totp: code,
+      totpVer: String(version),
+      totpServer: code,
+    });
+
+    const url = `${SPOTIFY_TOKEN_BASE}api/token?${params}`;
+
+    const resp = await fetch(url, {
+      method: "GET",
+      headers: {
+        Cookie: `sp_dc=${this.spDc}`,
+        "User-Agent": USER_AGENT,
+        Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
+        "app-platform": "WebPlayer",
+        Origin: "https://open.spotify.com",
+        Referer: "https://open.spotify.com/",
+        "Sec-Fetch-Site": "same-origin",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Dest": "empty",
+        "Sec-CH-UA": '"Chromium";v="131", "Not_A Brand";v="24", "Google Chrome";v="131"',
+        "Sec-CH-UA-Platform": '"macOS"',
+        "Sec-CH-UA-Mobile": "?0",
+      },
+    });
+
+    if (!resp.ok) {
+      throw new Error(`Token request failed: HTTP ${resp.status}`);
+    }
+
+    const data: SpotifyTokenResponse = await resp.json();
+    if (!data.accessToken) {
+      throw new Error("Missing access token in response");
+    }
+
+    this.accessToken = data.accessToken;
+    this.tokenExpiresAt =
+      data.accessTokenExpirationTimestampMs > 0
+        ? data.accessTokenExpirationTimestampMs
+        : Date.now() + data.expiresIn * 1000;
+
+    return data.accessToken;
   }
 
   private async request<T>(
@@ -23,6 +151,8 @@ export class SpotifyApiClient implements SpotifyClient {
     path: string,
     options?: { params?: Record<string, string>; body?: unknown },
   ): Promise<T> {
+    const token = await this.getAccessToken();
+
     let url = `${SPOTIFY_API_BASE}${path}`;
     if (options?.params) {
       const qs = new URLSearchParams(options.params);
@@ -30,7 +160,8 @@ export class SpotifyApiClient implements SpotifyClient {
     }
 
     const headers: Record<string, string> = {
-      Authorization: `Bearer ${this.accessToken}`,
+      Authorization: `Bearer ${token}`,
+      "User-Agent": USER_AGENT,
       Accept: "application/json",
       "Accept-Language": "en-US,en;q=0.9",
       "app-platform": "WebPlayer",
@@ -44,11 +175,23 @@ export class SpotifyApiClient implements SpotifyClient {
 
     const resp = await fetch(url, fetchOptions);
 
+    // 401 — refresh token and retry once
+    if (resp.status === 401) {
+      this.accessToken = null;
+      const newToken = await this.getAccessToken();
+      headers.Authorization = `Bearer ${newToken}`;
+      const retry = await fetch(url, { method, headers, body: fetchOptions.body as BodyInit });
+      if (!retry.ok) {
+        throw new Error(`Spotify API error: ${retry.status} ${retry.statusText}`);
+      }
+      return retry.json() as Promise<T>;
+    }
+
     // 429 — rate limited, retry with exponential backoff (up to 3 attempts)
     if (resp.status === 429) {
       let lastResp = resp;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const backoffBase = 2 ** (attempt + 1);
+        const backoffBase = 2 ** (attempt + 1); // 2, 4, 8
         const retryAfter = parseInt(lastResp.headers.get("Retry-After") ?? "0", 10);
         const delay = Math.max(retryAfter, backoffBase);
         await new Promise((resolve) => setTimeout(resolve, delay * 1000));

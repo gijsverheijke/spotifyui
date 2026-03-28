@@ -3,37 +3,19 @@
 import { useState } from 'react'
 
 interface CookieInputProps {
-  onAuthenticated: (accessToken: string, expiresAt: number, spDc: string) => void
+  onSubmit: (cookie: string) => void
   isLoading: boolean
   error: string | null
-  onError: (error: string) => void
-  onLoadingChange: (loading: boolean) => void
 }
 
-export default function CookieInput({ onAuthenticated, isLoading, error, onError, onLoadingChange }: CookieInputProps) {
+export default function CookieInput({ onSubmit, isLoading, error }: CookieInputProps) {
   const [cookie, setCookie] = useState('')
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = cookie.trim()
-    if (!trimmed) return
-
-    onLoadingChange(true)
-    onError('')
-
-    try {
-      const { exchangeToken } = await import('@/lib/spotify/browser-auth')
-      const token = await exchangeToken(trimmed)
-
-      if (token.isAnonymous) {
-        throw new Error('Invalid cookie — got anonymous token. Check your sp_dc value.')
-      }
-
-      onAuthenticated(token.accessToken, token.expiresAt, trimmed)
-    } catch (err) {
-      onError(err instanceof Error ? err.message : 'Authentication failed')
-    } finally {
-      onLoadingChange(false)
+    if (trimmed) {
+      onSubmit(trimmed)
     }
   }
 
