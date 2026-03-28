@@ -229,15 +229,20 @@ export class SpotifyApiClient implements SpotifyClient {
       return retry.json() as Promise<T>;
     }
 
-    // 429 — rate limited, retry with exponential backoff (up to 3 attempts)
+    // 429 — rate limited, respect Retry-After and clear token (like spogo)
     if (resp.status === 429) {
+      const maxRetryDelay = 10; // seconds — cap to avoid hanging forever
       let lastResp = resp;
       for (let attempt = 0; attempt < 3; attempt++) {
-        const backoffBase = 2 ** (attempt + 1); // 2, 4, 8
-        const retryAfter = parseInt(lastResp.headers.get("Retry-After") ?? "0", 10);
-        const delay = Math.max(retryAfter, backoffBase);
+        const retryAfterRaw = parseInt(lastResp.headers.get("Retry-After") ?? "2", 10);
+        const delay = Math.min(retryAfterRaw || 2 ** (attempt + 1), maxRetryDelay);
+        console.log(`[spotify] 429 — waiting ${delay}s before retry ${attempt + 1}/3`);
+        // Clear cached token — Spotify may issue a fresh one with clean rate limit
+        this.accessToken = null;
         await new Promise((resolve) => setTimeout(resolve, delay * 1000));
-        lastResp = await fetch(url, fetchOptions);
+        const newToken = await this.getAccessToken();
+        headers.Authorization = `Bearer ${newToken}`;
+        lastResp = await fetch(url, { ...fetchOptions, headers });
         if (lastResp.status !== 429) break;
       }
       if (!lastResp.ok) {
