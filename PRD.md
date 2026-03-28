@@ -331,24 +331,40 @@ Adds tracks to an existing playlist.
 5. Claude receives the data and generates an HTML page with Tailwind CSS
 6. Frontend renders the generated page in a sandboxed iframe
 
+### Design Philosophy
+
+The generated UI should not look like a generic SaaS dashboard. **The design should match the data.** This is what makes it generative UI, not just "fill a template with data."
+
+The AI should adapt the visual identity of each page to the content:
+- **Color palette**: Derived from the mood/genre of the music. French chanson? Muted blues, cream, serif typography. Speed metal? Black, red, aggressive angles. Jazz? Warm tones, smoky gradients, elegant spacing.
+- **Typography feel**: Playful for pop, refined for classical, bold for hip-hop. Use Google Fonts via CDN to vary typefaces.
+- **Layout style**: Not everything is a card grid. Use magazine layouts, poster-style compositions, asymmetric designs, bold hero sections. Let the data shape the structure.
+- **Charts**: Use ECharts for data visualizations — heatmap calendars for listening history, treemaps for genre distribution, radar charts for taste profiles, gauge charts for intensity. Style charts to match the page theme.
+- **Imagery**: Use album art and artist images prominently. Let them bleed, overlap, or dominate — not just sit in neat squares.
+
+The goal: every page should feel like it was designed specifically for that query and that data. Two different users asking the same question should get pages that feel different because their data is different.
+
 ### System Prompt (concept)
 
 The AI is instructed to:
 - Analyze the user's request and decide which data to fetch
 - Call the appropriate Spotify tools to gather data
-- Generate a single-page HTML response using Tailwind CSS
-- Make the page visually rich — use album art, artist images, color, and thoughtful layout
-- Vary the layout based on the data and query — grids for artists, timelines for history, tables for comparisons, cards for tracks
-- Include interactive elements where appropriate (tabs, expandable sections, hover effects)
+- Generate a single-page HTML response that is visually striking and thematically matched to the content
+- Follow the design philosophy above — adapt colors, typography, layout, and chart style to the music/data
+- Use ECharts (loaded via CDN) for any data visualizations
+- Use Tailwind CSS (loaded via CDN) for layout and styling
+- Use Google Fonts (loaded via CDN) to vary typography per theme
+- Include interactive elements where appropriate (tabs, expandable sections, hover effects, chart tooltips)
 - Never hallucinate data — only use what the tools return
 - For recommendation requests: analyze the user's taste from their data and use its own knowledge of music + search to find fitting tracks
 
 ### Output Format
 
 The AI returns a code block containing an HTML page that:
-- Uses Tailwind CSS (loaded via CDN)
+- Uses Tailwind CSS + ECharts + Google Fonts (all loaded via CDN)
 - Embeds the fetched Spotify data directly (images, names, URIs)
-- Is self-contained (no external JS dependencies beyond Tailwind)
+- Is self-contained (no dependencies beyond CDN scripts)
+- Has a unique visual identity that matches the data and query
 - Renders responsively
 - Links back to Spotify where appropriate (track/artist/album URIs)
 
@@ -381,6 +397,17 @@ The AI returns a code block containing an HTML page that:
 - Mobile-optimized UI
 - Multiple simultaneous sessions
 
+## Multi-Model Support
+
+The backend supports two AI providers, selectable per request or via configuration:
+
+| Provider | Model | Use case |
+|----------|-------|----------|
+| Anthropic | Claude Sonnet 4.6 | Higher quality generation, better design sense |
+| Minimax | M2.7 | Cost-effective alternative |
+
+Both providers are called through a common interface. The orchestrator abstracts the API differences (message format, tool calling conventions) so the Spotify tool layer and prompt logic are shared. A model selector in the UI lets the user pick which model to use.
+
 ## Constraints & Considerations
 
 ### No Recommendations or Audio Features
@@ -405,10 +432,12 @@ The `sp_dc` cookie has a limited lifetime. When it expires:
 
 | Layer | Technology |
 |-------|-----------|
-| Framework | Next.js 15 (App Router) |
+| Framework | Next.js (App Router) |
 | Language | TypeScript |
-| Styling | Tailwind CSS |
-| AI | Claude API (Anthropic) |
+| Styling | Tailwind CSS (CDN, in generated pages) |
+| Charts | Apache ECharts (CDN, in generated pages) |
+| Typography | Google Fonts (CDN, in generated pages) |
+| AI | Claude Sonnet 4.6 (Anthropic API) + Minimax M2.7 (Minimax API) |
 | Auth | Cookie-based (sp_dc) via open.spotify.com/api/token |
 | Generated UI rendering | Sandboxed iframe |
 | State | React state (in-memory for MVP) |
@@ -433,15 +462,18 @@ spotifyui/
 │   │   │   ├── tools.ts             # Tool definitions for AI
 │   │   │   └── types.ts             # Spotify type definitions
 │   │   ├── ai/
-│   │   │   ├── orchestrator.ts      # Claude API integration
-│   │   │   └── prompts.ts           # System prompts
+│   │   │   ├── orchestrator.ts      # Model-agnostic orchestration
+│   │   │   ├── providers/
+│   │   │   │   ├── anthropic.ts     # Claude Sonnet 4.6 provider
+│   │   │   │   └── minimax.ts       # Minimax M2.7 provider
+│   │   │   └── prompts.ts           # System prompts + design guidelines
 │   │   └── auth/
 │   │       └── session.ts           # Cookie/token session management
 │   └── components/
 │       ├── Chat.tsx                  # Chat input + message list
 │       ├── GeneratedPage.tsx         # Sandboxed iframe renderer
 │       └── CookieInput.tsx          # sp_dc cookie input screen
-├── .env.local                        # ANTHROPIC_API_KEY
+├── .env.local                        # ANTHROPIC_API_KEY, MINIMAX_API_KEY
 ├── package.json
 ├── tsconfig.json
 ├── tailwind.config.ts
