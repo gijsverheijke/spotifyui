@@ -86,8 +86,16 @@ export class MinimaxProvider implements AIProvider {
       throw new Error(`Minimax API error ${response.status}: ${text}`);
     }
 
-    const data = (await response.json()) as MinimaxResponse;
-    return this.parseResponse(data);
+    const data = await response.json();
+    console.log("[minimax] response:", JSON.stringify(data).slice(0, 500));
+    
+    // MiniMax returns base_resp on error even with HTTP 200
+    const baseResp = (data as Record<string, unknown>).base_resp as { status_code?: number; status_msg?: string } | undefined;
+    if (baseResp && baseResp.status_code && baseResp.status_code !== 0) {
+      throw new Error(`MiniMax API error: ${baseResp.status_msg ?? "unknown"} (code ${baseResp.status_code})`);
+    }
+    
+    return this.parseResponse(data as MinimaxResponse);
   }
 
   private convertMessages(

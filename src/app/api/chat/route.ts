@@ -105,6 +105,7 @@ export async function POST(request: Request): Promise<Response> {
       html: result.html,
     });
   } catch (error) {
+    console.error("[chat] error:", error);
     const message =
       error instanceof Error ? error.message : "Chat request failed";
     return jsonError(500, message);
