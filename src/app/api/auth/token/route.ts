@@ -29,8 +29,13 @@ export async function POST(request: Request): Promise<Response> {
   let profile: SpotifyUser;
   try {
     profile = await client.get<SpotifyUser>("/me");
-  } catch {
-    return Response.json({ error: "Invalid Spotify cookie" }, { status: 401 });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Unknown error";
+    const is429 = message.includes("429");
+    return Response.json(
+      { error: is429 ? "Spotify rate limit — try again in a few minutes" : "Invalid Spotify cookie", detail: message },
+      { status: is429 ? 429 : 401 },
+    );
   }
 
   const sessionId = createSession(spDc);
