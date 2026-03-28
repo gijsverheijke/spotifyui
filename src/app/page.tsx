@@ -23,7 +23,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
-  const [model, setModel] = useState<ChatModel>('anthropic')
+  const [model, setModel] = useState<ChatModel>('minimax')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { toasts, addToast, dismissToast } = useToast()
 
