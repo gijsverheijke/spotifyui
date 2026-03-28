@@ -10,14 +10,17 @@ interface UserProfile {
   avatar?: string
 }
 
+type ChatModel = 'minimax' | 'anthropic'
+
 export default function Home() {
-  const [cookie, setCookie] = useState<string | null>(null)
+  const [sessionId, setSessionId] = useState<string | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
+  const [model] = useState<ChatModel>('minimax')
 
   const selectedHtml = messages.find((m) => m.id === selectedMessageId)?.html ?? null
 
@@ -38,12 +41,15 @@ export default function Home() {
       }
 
       const data = await res.json()
-      setCookie(spDc)
+      setSessionId(data.sessionId ?? null)
       setProfile({
-        displayName: data.displayName ?? 'Spotify User',
-        avatar: data.avatar,
+        displayName: data.profile?.displayName ?? 'Spotify User',
+        avatar: data.profile?.avatar,
       })
+      setMessages([])
+      setSelectedMessageId(null)
     } catch (err) {
+      setSessionId(null)
       setAuthError(err instanceof Error ? err.message : 'Authentication failed')
     } finally {
       setAuthLoading(false)
@@ -51,6 +57,10 @@ export default function Home() {
   }, [])
 
   const handleSend = useCallback(async (content: string) => {
+    if (!sessionId) {
+      return
+    }
+
     const userMessage: Message = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -66,7 +76,8 @@ export default function Home() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: content,
-          history: messages.map(({ role, content }) => ({ role, content })),
+          sessionId,
+          model,
         }),
       })
 
@@ -99,14 +110,14 @@ export default function Home() {
     } finally {
       setChatLoading(false)
     }
-  }, [messages])
+  }, [model, sessionId])
 
   const handleSelectMessage = useCallback((msg: Message) => {
     setSelectedMessageId(msg.id)
   }, [])
 
   // State 1: Not authenticated
-  if (!cookie || !profile) {
+  if (!sessionId || !profile) {
     return (
       <CookieInput
         onSubmit={handleCookieSubmit}

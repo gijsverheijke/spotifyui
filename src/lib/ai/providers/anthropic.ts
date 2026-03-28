@@ -1,11 +1,13 @@
 import type { AIProvider, AIMessage, AIResponse, ToolDefinition } from "../types";
 
 interface AnthropicContentBlock {
-  type: "text" | "tool_use";
+  type: "text" | "tool_use" | "tool_result";
   text?: string;
   id?: string;
   name?: string;
   input?: Record<string, unknown>;
+  tool_use_id?: string;
+  content?: string;
 }
 
 interface AnthropicMessage {

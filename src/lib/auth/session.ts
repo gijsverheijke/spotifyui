@@ -1,10 +1,11 @@
 import { SpotifyApiClient } from "../spotify/client";
+import type { AIMessage } from "../ai/types";
 import type { SpotifyUser } from "../spotify/types";
 
 export interface Session {
   spDc: string;
   client: SpotifyApiClient;
-  messages: Array<{ role: "user" | "assistant"; content: string }>;
+  messages: AIMessage[];
   profile: SpotifyUser | null;
 }
 
