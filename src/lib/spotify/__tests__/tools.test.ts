@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { spotifyTools, executeTool } from "../tools";
 import type { SpotifyClient } from "../types";
 
@@ -8,9 +8,20 @@ import type { SpotifyClient } from "../types";
 
 function createMockClient(overrides?: Partial<SpotifyClient>): SpotifyClient {
   return {
-    get: vi.fn().mockResolvedValue({ mock: true }),
-    post: vi.fn().mockResolvedValue({ mock: true }),
+    getAccessToken: vi.fn().mockResolvedValue("mock-token"),
     getUserId: vi.fn().mockResolvedValue("user123"),
+    getUserProfile: vi.fn().mockResolvedValue({ id: "user123", display_name: "Test" }),
+    search: vi.fn().mockResolvedValue({ tracks: { items: [] } }),
+    getTopItems: vi.fn().mockResolvedValue({ items: [] }),
+    getRecentlyPlayed: vi.fn().mockResolvedValue({ items: [] }),
+    getSavedTracks: vi.fn().mockResolvedValue({ items: [] }),
+    getFollowedArtists: vi.fn().mockResolvedValue({ artists: { items: [] } }),
+    getUserPlaylists: vi.fn().mockResolvedValue({ items: [] }),
+    getPlaylist: vi.fn().mockResolvedValue({ id: "pl1", name: "Test" }),
+    getArtistTopTracks: vi.fn().mockResolvedValue({ tracks: [] }),
+    getTracks: vi.fn().mockResolvedValue({ tracks: [] }),
+    getArtists: vi.fn().mockResolvedValue({ artists: [] }),
+    getAlbum: vi.fn().mockResolvedValue({ id: "alb1", name: "Album" }),
     ...overrides,
   };
 }
@@ -20,8 +31,8 @@ function createMockClient(overrides?: Partial<SpotifyClient>): SpotifyClient {
 // ---------------------------------------------------------------------------
 
 describe("spotifyTools definitions", () => {
-  it("exports exactly 14 tools", () => {
-    expect(spotifyTools).toHaveLength(14);
+  it("exports exactly 12 tools", () => {
+    expect(spotifyTools).toHaveLength(12);
   });
 
   it("every tool has name, description, and input_schema", () => {
@@ -57,8 +68,6 @@ describe("spotifyTools definitions", () => {
     "get_album",
     "get_user_playlists",
     "get_playlist",
-    "create_playlist",
-    "add_tracks_to_playlist",
   ];
 
   it.each(expectedNames)("includes tool: %s", (name) => {
@@ -82,21 +91,18 @@ describe("executeTool — unknown tool", () => {
 // ---------------------------------------------------------------------------
 
 describe("get_user_profile", () => {
-  it("calls GET /me", async () => {
+  it("calls getUserProfile()", async () => {
     const client = createMockClient();
     await executeTool(client, "get_user_profile", {});
-    expect(client.get).toHaveBeenCalledWith("/me");
+    expect(client.getUserProfile).toHaveBeenCalled();
   });
 });
 
 describe("get_top_items", () => {
-  it("calls GET /me/top/artists with defaults", async () => {
+  it("calls getTopItems with defaults", async () => {
     const client = createMockClient();
     await executeTool(client, "get_top_items", { type: "artists" });
-    expect(client.get).toHaveBeenCalledWith("/me/top/artists", {
-      time_range: "medium_term",
-      limit: "20",
-    });
+    expect(client.getTopItems).toHaveBeenCalledWith("artists", "medium_term", 20);
   });
 
   it("passes custom time_range and limit", async () => {
@@ -106,10 +112,7 @@ describe("get_top_items", () => {
       time_range: "short_term",
       limit: 5,
     });
-    expect(client.get).toHaveBeenCalledWith("/me/top/tracks", {
-      time_range: "short_term",
-      limit: "5",
-    });
+    expect(client.getTopItems).toHaveBeenCalledWith("tracks", "short_term", 5);
   });
 
   it("rejects invalid type", async () => {
@@ -121,86 +124,43 @@ describe("get_top_items", () => {
 });
 
 describe("get_recently_played", () => {
-  it("calls GET /me/player/recently-played with defaults", async () => {
+  it("calls getRecentlyPlayed with default limit", async () => {
     const client = createMockClient();
     await executeTool(client, "get_recently_played", {});
-    expect(client.get).toHaveBeenCalledWith("/me/player/recently-played", {
-      limit: "20",
-    });
-  });
-
-  it("includes before param when provided", async () => {
-    const client = createMockClient();
-    await executeTool(client, "get_recently_played", { before: 1700000000000 });
-    expect(client.get).toHaveBeenCalledWith("/me/player/recently-played", {
-      limit: "20",
-      before: "1700000000000",
-    });
-  });
-
-  it("includes after param when provided", async () => {
-    const client = createMockClient();
-    await executeTool(client, "get_recently_played", { after: 1700000000000 });
-    expect(client.get).toHaveBeenCalledWith("/me/player/recently-played", {
-      limit: "20",
-      after: "1700000000000",
-    });
+    expect(client.getRecentlyPlayed).toHaveBeenCalledWith(20);
   });
 });
 
 describe("get_saved_tracks", () => {
-  it("calls GET /me/tracks with defaults", async () => {
+  it("calls getSavedTracks with defaults", async () => {
     const client = createMockClient();
     await executeTool(client, "get_saved_tracks", {});
-    expect(client.get).toHaveBeenCalledWith("/me/tracks", {
-      limit: "20",
-      offset: "0",
-    });
+    expect(client.getSavedTracks).toHaveBeenCalledWith(20, 0);
   });
 
   it("passes custom limit and offset", async () => {
     const client = createMockClient();
     await executeTool(client, "get_saved_tracks", { limit: 50, offset: 100 });
-    expect(client.get).toHaveBeenCalledWith("/me/tracks", {
-      limit: "50",
-      offset: "100",
-    });
+    expect(client.getSavedTracks).toHaveBeenCalledWith(50, 100);
   });
 });
 
 describe("get_followed_artists", () => {
-  it("calls GET /me/following with type=artist", async () => {
+  it("calls getFollowedArtists with default limit", async () => {
     const client = createMockClient();
     await executeTool(client, "get_followed_artists", {});
-    expect(client.get).toHaveBeenCalledWith("/me/following", {
-      type: "artist",
-      limit: "20",
-    });
-  });
-
-  it("includes after cursor when provided", async () => {
-    const client = createMockClient();
-    await executeTool(client, "get_followed_artists", { after: "abc123" });
-    expect(client.get).toHaveBeenCalledWith("/me/following", {
-      type: "artist",
-      limit: "20",
-      after: "abc123",
-    });
+    expect(client.getFollowedArtists).toHaveBeenCalledWith(20);
   });
 });
 
 describe("search", () => {
-  it("calls GET /search with joined types", async () => {
+  it("calls search with query and types", async () => {
     const client = createMockClient();
     await executeTool(client, "search", {
       query: "radiohead",
       types: ["artist", "album"],
     });
-    expect(client.get).toHaveBeenCalledWith("/search", {
-      q: "radiohead",
-      type: "artist,album",
-      limit: "10",
-    });
+    expect(client.search).toHaveBeenCalledWith("radiohead", ["artist", "album"], 10);
   });
 
   it("rejects empty types array", async () => {
@@ -212,18 +172,18 @@ describe("search", () => {
 });
 
 describe("get_artist_top_tracks", () => {
-  it("calls GET /artists/{id}/top-tracks", async () => {
+  it("calls getArtistTopTracks with artist_id", async () => {
     const client = createMockClient();
     await executeTool(client, "get_artist_top_tracks", { artist_id: "abc123" });
-    expect(client.get).toHaveBeenCalledWith("/artists/abc123/top-tracks");
+    expect(client.getArtistTopTracks).toHaveBeenCalledWith("abc123");
   });
 });
 
 describe("get_tracks", () => {
-  it("calls GET /tracks with joined IDs", async () => {
+  it("calls getTracks with IDs", async () => {
     const client = createMockClient();
     await executeTool(client, "get_tracks", { track_ids: ["t1", "t2", "t3"] });
-    expect(client.get).toHaveBeenCalledWith("/tracks", { ids: "t1,t2,t3" });
+    expect(client.getTracks).toHaveBeenCalledWith(["t1", "t2", "t3"]);
   });
 
   it("rejects more than 20 IDs", async () => {
@@ -236,100 +196,33 @@ describe("get_tracks", () => {
 });
 
 describe("get_artists", () => {
-  it("calls GET /artists with joined IDs", async () => {
+  it("calls getArtists with IDs", async () => {
     const client = createMockClient();
     await executeTool(client, "get_artists", { artist_ids: ["a1", "a2"] });
-    expect(client.get).toHaveBeenCalledWith("/artists", { ids: "a1,a2" });
+    expect(client.getArtists).toHaveBeenCalledWith(["a1", "a2"]);
   });
 });
 
 describe("get_album", () => {
-  it("calls GET /albums/{id}", async () => {
+  it("calls getAlbum with album_id", async () => {
     const client = createMockClient();
     await executeTool(client, "get_album", { album_id: "alb123" });
-    expect(client.get).toHaveBeenCalledWith("/albums/alb123");
+    expect(client.getAlbum).toHaveBeenCalledWith("alb123");
   });
 });
 
 describe("get_user_playlists", () => {
-  it("calls GET /me/playlists with defaults", async () => {
+  it("calls getUserPlaylists with defaults", async () => {
     const client = createMockClient();
     await executeTool(client, "get_user_playlists", {});
-    expect(client.get).toHaveBeenCalledWith("/me/playlists", {
-      limit: "20",
-      offset: "0",
-    });
+    expect(client.getUserPlaylists).toHaveBeenCalledWith(20, 0);
   });
 });
 
 describe("get_playlist", () => {
-  it("calls GET /playlists/{id}", async () => {
+  it("calls getPlaylist with playlist_id", async () => {
     const client = createMockClient();
     await executeTool(client, "get_playlist", { playlist_id: "pl123" });
-    expect(client.get).toHaveBeenCalledWith("/playlists/pl123");
-  });
-});
-
-describe("create_playlist", () => {
-  it("fetches user ID and calls POST /users/{id}/playlists", async () => {
-    const client = createMockClient();
-    await executeTool(client, "create_playlist", { name: "Road Trip" });
-    expect(client.getUserId).toHaveBeenCalled();
-    expect(client.post).toHaveBeenCalledWith("/users/user123/playlists", {
-      name: "Road Trip",
-      description: "",
-      public: true,
-    });
-  });
-
-  it("passes custom description and public flag", async () => {
-    const client = createMockClient();
-    await executeTool(client, "create_playlist", {
-      name: "Chill",
-      description: "Relaxing tunes",
-      public: false,
-    });
-    expect(client.post).toHaveBeenCalledWith("/users/user123/playlists", {
-      name: "Chill",
-      description: "Relaxing tunes",
-      public: false,
-    });
-  });
-});
-
-describe("add_tracks_to_playlist", () => {
-  it("calls POST /playlists/{id}/tracks with URIs", async () => {
-    const client = createMockClient();
-    await executeTool(client, "add_tracks_to_playlist", {
-      playlist_id: "pl123",
-      track_uris: ["spotify:track:a", "spotify:track:b"],
-    });
-    expect(client.post).toHaveBeenCalledWith("/playlists/pl123/tracks", {
-      uris: ["spotify:track:a", "spotify:track:b"],
-    });
-  });
-
-  it("includes position when provided", async () => {
-    const client = createMockClient();
-    await executeTool(client, "add_tracks_to_playlist", {
-      playlist_id: "pl123",
-      track_uris: ["spotify:track:a"],
-      position: 3,
-    });
-    expect(client.post).toHaveBeenCalledWith("/playlists/pl123/tracks", {
-      uris: ["spotify:track:a"],
-      position: 3,
-    });
-  });
-
-  it("rejects more than 100 URIs", async () => {
-    const client = createMockClient();
-    const uris = Array.from({ length: 101 }, (_, i) => `spotify:track:${i}`);
-    await expect(
-      executeTool(client, "add_tracks_to_playlist", {
-        playlist_id: "pl123",
-        track_uris: uris,
-      }),
-    ).rejects.toThrow();
+    expect(client.getPlaylist).toHaveBeenCalledWith("pl123");
   });
 });

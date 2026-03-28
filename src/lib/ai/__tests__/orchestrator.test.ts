@@ -18,9 +18,20 @@ function makeProvider(responses: AIResponse[]): AIProvider {
 
 function makeSpotifyClient(): SpotifyClient {
   return {
-    get: vi.fn(),
-    post: vi.fn(),
+    getAccessToken: vi.fn(async () => "mock-token"),
     getUserId: vi.fn(async () => "user123"),
+    getUserProfile: vi.fn(async () => ({ id: "user123", display_name: "Test" })),
+    search: vi.fn(async () => ({ tracks: { items: [] } })),
+    getTopItems: vi.fn(async () => ({ items: [] })),
+    getRecentlyPlayed: vi.fn(async () => ({ items: [] })),
+    getSavedTracks: vi.fn(async () => ({ items: [] })),
+    getFollowedArtists: vi.fn(async () => ({ artists: { items: [] } })),
+    getUserPlaylists: vi.fn(async () => ({ items: [] })),
+    getPlaylist: vi.fn(async () => ({ id: "pl1" })),
+    getArtistTopTracks: vi.fn(async () => ({ tracks: [] })),
+    getTracks: vi.fn(async () => ({ tracks: [] })),
+    getArtists: vi.fn(async () => ({ artists: [] })),
+    getAlbum: vi.fn(async () => ({ id: "alb1" })),
   };
 }
 

@@ -42,36 +42,21 @@ export async function POST(request: Request): Promise<Response> {
 
   const sessionId = createSession(spDc);
 
-  // Try to fetch profile with a short timeout — don't block auth on it
+  // Try to fetch profile via Pathfinder — don't block auth on it
   let displayName = "Spotify User";
   let avatar: string | undefined;
   try {
-    console.log("[auth] fetching /me profile (3s timeout)...");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const token = await client.getAccessToken();
-    const resp = await fetch("https://api.spotify.com/v1/me", {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: "application/json",
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (resp.ok) {
-      const profile: SpotifyUser = await resp.json();
-      displayName = profile.display_name ?? displayName;
-      avatar = profile.images?.[0]?.url;
-      const session = getSession(sessionId);
-      if (session) {
-        session.profile = profile;
-      }
-      console.log(`[auth] profile: ${displayName}`);
-    } else {
-      console.log(`[auth] /me returned ${resp.status} (non-fatal)`);
+    console.log("[auth] fetching profile via pathfinder...");
+    const profile = (await client.getUserProfile()) as SpotifyUser;
+    displayName = profile.display_name ?? displayName;
+    avatar = profile.images?.[0]?.url;
+    const session = getSession(sessionId);
+    if (session) {
+      session.profile = profile;
     }
+    console.log(`[auth] profile: ${displayName}`);
   } catch (err) {
-    console.log("[auth] /me profile fetch failed (non-fatal):", err);
+    console.log("[auth] profile fetch failed (non-fatal):", err);
   }
 
   return Response.json({

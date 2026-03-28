@@ -242,9 +242,22 @@ export interface SpotifyFollowedArtistsResponse {
 }
 
 // SpotifyClient interface used by tools.ts
+// All data comes from api-partner.spotify.com/pathfinder (GraphQL).
+// The REST API (api.spotify.com/v1/*) is blocked for web player tokens.
 
 export interface SpotifyClient {
-  get<T = unknown>(path: string, params?: Record<string, string>): Promise<T>;
-  post<T = unknown>(path: string, body?: unknown): Promise<T>;
+  getAccessToken(): Promise<string>;
   getUserId(): Promise<string>;
+  getUserProfile(): Promise<unknown>;
+  search(query: string, types: string[], limit?: number, offset?: number): Promise<unknown>;
+  getTopItems(type: string, timeRange: string, limit: number): Promise<unknown>;
+  getRecentlyPlayed(limit: number): Promise<unknown>;
+  getSavedTracks(limit: number, offset: number): Promise<unknown>;
+  getFollowedArtists(limit: number, after?: string): Promise<unknown>;
+  getUserPlaylists(limit: number, offset: number): Promise<unknown>;
+  getPlaylist(playlistId: string): Promise<unknown>;
+  getArtistTopTracks(artistId: string): Promise<unknown>;
+  getTracks(ids: string[]): Promise<unknown>;
+  getArtists(ids: string[]): Promise<unknown>;
+  getAlbum(albumId: string): Promise<unknown>;
 }
