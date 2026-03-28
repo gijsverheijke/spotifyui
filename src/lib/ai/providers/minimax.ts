@@ -70,7 +70,7 @@ export class MinimaxProvider implements AIProvider {
     }
 
     const response = await fetch(
-      "https://api.minimax.chat/v1/text/chatcompletion_v2",
+      "https://api.minimax.io/v1/text/chatcompletion_v2",
       {
         method: "POST",
         headers: {
