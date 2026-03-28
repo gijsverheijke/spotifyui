@@ -206,13 +206,16 @@ export class SpotifyApiClient implements SpotifyClient {
       "app-platform": "WebPlayer",
     };
 
-    const fetchOptions: RequestInit = { method, headers };
+    const fetchOptions: RequestInit = { method, headers, signal: AbortSignal.timeout(15_000) };
     if (options?.body !== undefined) {
       headers["Content-Type"] = "application/json";
       fetchOptions.body = JSON.stringify(options.body);
     }
 
+    console.log(`[spotify] API request: ${method} ${url}`);
+    const t0 = Date.now();
     const resp = await fetch(url, fetchOptions);
+    console.log(`[spotify] API response: ${resp.status} in ${Date.now() - t0}ms`);
 
     // 401 — refresh token and retry once
     if (resp.status === 401) {
