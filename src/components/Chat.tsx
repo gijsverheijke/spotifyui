@@ -9,6 +9,8 @@ export interface Message {
   html?: string
 }
 
+export type ChatModel = 'minimax' | 'anthropic'
+
 interface ChatProps {
   messages: Message[]
   onSend: (message: string) => void
@@ -17,6 +19,9 @@ interface ChatProps {
   isLoading: boolean
   userName?: string
   userAvatar?: string
+  model: ChatModel
+  onModelChange: (model: ChatModel) => void
+  onMenuClick?: () => void
 }
 
 export default function Chat({
@@ -27,6 +32,9 @@ export default function Chat({
   isLoading,
   userName,
   userAvatar,
+  model,
+  onModelChange,
+  onMenuClick,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -63,6 +71,17 @@ export default function Chat({
     <div className="flex h-full flex-col bg-zinc-950">
       {/* Header */}
       <div className="flex items-center gap-3 border-b border-zinc-800 px-4 py-3">
+        {onMenuClick && (
+          <button
+            onClick={onMenuClick}
+            className="rounded p-1 text-zinc-400 hover:text-white lg:hidden"
+            aria-label="Open history"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M3 5h12M3 9h12M3 13h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
+          </button>
+        )}
         {userAvatar && (
           <img
             src={userAvatar}
@@ -78,6 +97,14 @@ export default function Chat({
             <p className="truncate text-xs text-zinc-400">{userName}</p>
           )}
         </div>
+        <select
+          value={model}
+          onChange={(e) => onModelChange(e.target.value as ChatModel)}
+          className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-xs text-zinc-300 outline-none transition-colors focus:border-emerald-500"
+        >
+          <option value="anthropic">Anthropic</option>
+          <option value="minimax">MiniMax</option>
+        </select>
       </div>
 
       {/* Messages */}
@@ -85,12 +112,22 @@ export default function Chat({
         {messages.length === 0 && (
           <div className="flex h-full items-center justify-center">
             <div className="text-center">
-              <p className="mb-2 text-sm text-zinc-400">Ask anything about your Spotify data</p>
+              {userAvatar && (
+                <img
+                  src={userAvatar}
+                  alt={userName ?? 'User'}
+                  className="mx-auto mb-3 h-16 w-16 rounded-full ring-2 ring-zinc-700"
+                />
+              )}
+              <h3 className="mb-1 text-lg font-semibold text-white">
+                Hey{userName ? `, ${userName}` : ''}!
+              </h3>
+              <p className="mb-5 text-sm text-zinc-400">What would you like to explore?</p>
               <div className="flex flex-wrap justify-center gap-2">
                 {[
-                  'What are my top artists?',
-                  'Show me my recent history',
-                  'Make me a playlist',
+                  'Show me my top artists',
+                  'What have I been listening to?',
+                  'Create a playlist for focus time',
                 ].map((suggestion) => (
                   <button
                     key={suggestion}

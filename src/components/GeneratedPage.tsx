@@ -1,24 +1,57 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 
 interface GeneratedPageProps {
   html: string | null
 }
 
+function injectHeightReporter(html: string): string {
+  const script = `
+<script>
+(function() {
+  function reportHeight() {
+    var h = document.documentElement.scrollHeight;
+    window.parent.postMessage({ type: 'iframe-height', height: h }, '*');
+  }
+  window.addEventListener('load', reportHeight);
+  new MutationObserver(reportHeight).observe(document.body, { childList: true, subtree: true, attributes: true });
+  setTimeout(reportHeight, 100);
+})();
+</script>`
+
+  if (html.includes('</body>')) {
+    return html.replace('</body>', script + '</body>')
+  }
+  return html + script
+}
+
 export default function GeneratedPage({ html }: GeneratedPageProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
+  const [loading, setLoading] = useState(false)
+  const [iframeHeight, setIframeHeight] = useState<number | null>(null)
+
+  const handleMessage = useCallback((e: MessageEvent) => {
+    if (e.data?.type === 'iframe-height' && typeof e.data.height === 'number') {
+      setIframeHeight(e.data.height)
+    }
+  }, [])
 
   useEffect(() => {
-    if (!iframeRef.current || !html) return
+    window.addEventListener('message', handleMessage)
+    return () => window.removeEventListener('message', handleMessage)
+  }, [handleMessage])
 
-    const doc = iframeRef.current.contentDocument
-    if (!doc) return
-
-    doc.open()
-    doc.write(html)
-    doc.close()
+  useEffect(() => {
+    if (html) {
+      setLoading(true)
+      setIframeHeight(null)
+    }
   }, [html])
+
+  const handleLoad = useCallback(() => {
+    setLoading(false)
+  }, [])
 
   if (!html) {
     return (
@@ -34,11 +67,24 @@ export default function GeneratedPage({ html }: GeneratedPageProps) {
   }
 
   return (
-    <iframe
-      ref={iframeRef}
-      sandbox="allow-scripts allow-same-origin"
-      title="Generated page"
-      className="h-full w-full border-0 bg-white"
-    />
+    <div className="relative h-full overflow-auto bg-white">
+      {loading && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center bg-zinc-900">
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-700 border-t-emerald-500" />
+            <p className="text-sm text-zinc-400">Rendering...</p>
+          </div>
+        </div>
+      )}
+      <iframe
+        ref={iframeRef}
+        srcDoc={injectHeightReporter(html)}
+        sandbox="allow-scripts allow-same-origin"
+        title="Generated page"
+        className="w-full border-0"
+        style={{ height: iframeHeight ? `${iframeHeight}px` : '100%' }}
+        onLoad={handleLoad}
+      />
+    </div>
   )
 }
