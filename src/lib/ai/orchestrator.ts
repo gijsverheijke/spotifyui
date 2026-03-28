@@ -89,8 +89,9 @@ export class Orchestrator {
   private async executeToolCalls(
     toolCalls: ToolCall[],
   ): Promise<{ toolCallId: string; content: string }[]> {
-    const results = await Promise.all(
-      toolCalls.map(async (tc) => {
+    // Execute tool calls sequentially to avoid Spotify API rate limits
+    const results: { toolCallId: string; content: string }[] = [];
+    for (const tc of toolCalls) {
         const handler = this.tools.find(
           (t) => t.definition.name === tc.name,
         );
@@ -108,9 +109,8 @@ export class Orchestrator {
           }
         }
 
-        return { toolCallId: tc.id, content };
-      }),
-    );
+        results.push({ toolCallId: tc.id, content });
+    }
 
     return results;
   }

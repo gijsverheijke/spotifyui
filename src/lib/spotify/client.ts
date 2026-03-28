@@ -101,6 +101,9 @@ export class SpotifyApiClient implements SpotifyClient {
   private tokenExpiresAt: number = 0;
   private refreshPromise: Promise<string> | null = null;
   private userId: string | null = null;
+  private clientId: string | null = null;
+  private clientToken: string | null = null;
+  private clientTokenExpiresAt: number = 0;
 
   constructor(spDc: string) {
     this.spDc = spDc;
@@ -177,12 +180,63 @@ export class SpotifyApiClient implements SpotifyClient {
     }
 
     this.accessToken = data.accessToken;
+    this.clientId = data.clientId ?? this.clientId;
     this.tokenExpiresAt =
       data.accessTokenExpirationTimestampMs > 0
         ? data.accessTokenExpirationTimestampMs
         : Date.now() + data.expiresIn * 1000;
 
     return data.accessToken;
+  }
+
+  private async getClientToken(): Promise<string | null> {
+    if (this.clientToken && Date.now() < this.clientTokenExpiresAt - 60_000) {
+      return this.clientToken;
+    }
+    if (!this.clientId) return null;
+    try {
+      const payload = {
+        client_data: {
+          client_version: "1.2.87.216.g698d3563",
+          client_id: this.clientId,
+          js_sdk_data: {
+            device_brand: "unknown",
+            device_model: "unknown",
+            os: "macos",
+            os_version: "unknown",
+            device_id: crypto.randomUUID(),
+            device_type: "computer",
+          },
+        },
+      };
+      const resp = await fetch("https://clienttoken.spotify.com/v1/clienttoken", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!resp.ok) {
+        console.log(`[spotify] clienttoken: HTTP ${resp.status}`);
+        return null;
+      }
+      const data = (await resp.json()) as {
+        granted_token?: { token?: string; expires_in?: number };
+      };
+      const token = data.granted_token?.token;
+      if (!token) return null;
+      const expiresIn = data.granted_token?.expires_in ?? 1800;
+      this.clientToken = token;
+      this.clientTokenExpiresAt = Date.now() + expiresIn * 1000;
+      console.log(`[spotify] clienttoken: obtained (expires in ${expiresIn}s)`);
+      return token;
+    } catch (err) {
+      console.log(`[spotify] clienttoken: failed`, err);
+      return null;
+    }
   }
 
   private async request<T>(
@@ -198,6 +252,7 @@ export class SpotifyApiClient implements SpotifyClient {
       url += `?${qs}`;
     }
 
+    const clientToken = await this.getClientToken();
     const headers: Record<string, string> = {
       Authorization: `Bearer ${token}`,
       "User-Agent": USER_AGENT,
@@ -205,6 +260,10 @@ export class SpotifyApiClient implements SpotifyClient {
       "Accept-Language": "en-US,en;q=0.9",
       "app-platform": "WebPlayer",
     };
+    if (clientToken) {
+      headers["Client-Token"] = clientToken;
+      headers["Spotify-App-Version"] = "1.2.87.216";
+    }
 
     const fetchOptions: RequestInit = { method, headers, signal: AbortSignal.timeout(15_000) };
     if (options?.body !== undefined) {
@@ -229,20 +288,23 @@ export class SpotifyApiClient implements SpotifyClient {
       return retry.json() as Promise<T>;
     }
 
-    // 429 — rate limited, respect Retry-After and clear token (like spogo)
+    // 429 — rate limited. Match spogo: cap retry delay at 3s, clear token, retry aggressively
     if (resp.status === 429) {
-      const maxRetryDelay = 10; // seconds — cap to avoid hanging forever
+      const maxRetryDelay = 3; // spogo caps at 3s regardless of Retry-After
+      const maxAttempts = 5;
       let lastResp = resp;
-      for (let attempt = 0; attempt < 3; attempt++) {
-        const retryAfterRaw = parseInt(lastResp.headers.get("Retry-After") ?? "2", 10);
-        const delay = Math.min(retryAfterRaw || 2 ** (attempt + 1), maxRetryDelay);
-        console.log(`[spotify] 429 — waiting ${delay}s before retry ${attempt + 1}/3`);
-        // Clear cached token — Spotify may issue a fresh one with clean rate limit
+      for (let attempt = 0; attempt < maxAttempts - 1; attempt++) {
+        const retryAfterRaw = parseInt(lastResp.headers.get("Retry-After") ?? "1", 10);
+        const delay = Math.min(retryAfterRaw || 1, maxRetryDelay);
+        console.log(`[spotify] 429 — waiting ${delay}s before retry ${attempt + 1}/${maxAttempts - 1}`);
+        // Clear cached token — get a fresh one (spogo does this)
         this.accessToken = null;
         await new Promise((resolve) => setTimeout(resolve, delay * 1000));
         const newToken = await this.getAccessToken();
-        headers.Authorization = `Bearer ${newToken}`;
-        lastResp = await fetch(url, { ...fetchOptions, headers });
+        const clientToken = await this.getClientToken();
+        const retryHeaders = { ...headers, Authorization: `Bearer ${newToken}` };
+        if (clientToken) retryHeaders["Client-Token"] = clientToken;
+        lastResp = await fetch(url, { ...fetchOptions, headers: retryHeaders });
         if (lastResp.status !== 429) break;
       }
       if (!lastResp.ok) {
