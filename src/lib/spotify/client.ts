@@ -6,8 +6,6 @@ import type { SpotifyClient, SpotifyTokenResponse, SpotifyUser } from "./types";
 // ---------------------------------------------------------------------------
 
 const TOTP_SECRET_URLS = [
-  "https://github.com/xyloflake/spot-secrets-go/blob/main/secrets/secretDict.json?raw=true",
-  "https://github.com/Thereallo1026/spotify-secrets/blob/main/secrets/secretDict.json?raw=true",
   "https://code.thetadev.de/ThetaDev/spotify-secrets/raw/branch/main/secrets/secretDict.json",
 ];
 
@@ -19,7 +17,7 @@ const FALLBACK_TOTP_VERSION = 18;
 const TOTP_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
 const TOTP_STEP_SECONDS = 30;
 const TOTP_DIGITS = 6;
-const TOTP_HTTP_TIMEOUT_MS = 5000;
+const TOTP_HTTP_TIMEOUT_MS = 3000;
 
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
@@ -294,15 +292,21 @@ export class SpotifyApiClient implements SpotifyClient {
       return retry.json() as Promise<T>;
     }
 
-    // 429 — rate limited, back off and retry once
+    // 429 — rate limited, retry with exponential backoff (up to 3 attempts)
     if (resp.status === 429) {
-      const retryAfter = parseInt(resp.headers.get("Retry-After") ?? "1", 10);
-      await new Promise((resolve) => setTimeout(resolve, retryAfter * 1000));
-      const retry = await fetch(url, fetchOptions);
-      if (!retry.ok) {
-        throw new Error(`Spotify API error: ${retry.status} ${retry.statusText}`);
+      let lastResp = resp;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const backoffBase = 2 ** (attempt + 1); // 2, 4, 8
+        const retryAfter = parseInt(lastResp.headers.get("Retry-After") ?? "0", 10);
+        const delay = Math.max(retryAfter, backoffBase);
+        await new Promise((resolve) => setTimeout(resolve, delay * 1000));
+        lastResp = await fetch(url, fetchOptions);
+        if (lastResp.status !== 429) break;
       }
-      return retry.json() as Promise<T>;
+      if (!lastResp.ok) {
+        throw new Error(`Spotify API error: ${lastResp.status} ${lastResp.statusText}`);
+      }
+      return lastResp.json() as Promise<T>;
     }
 
     if (!resp.ok) {
