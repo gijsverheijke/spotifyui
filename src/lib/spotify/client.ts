@@ -127,7 +127,10 @@ export class SpotifyApiClient implements SpotifyClient {
   }
 
   private async fetchToken(): Promise<string> {
+    console.log("[spotify] fetchToken: generating TOTP...");
+    const t0 = Date.now();
     const { code, version } = await generateTOTP(new Date());
+    console.log(`[spotify] fetchToken: TOTP generated (v${version}) in ${Date.now() - t0}ms`);
 
     const params = new URLSearchParams({
       reason: "init",
@@ -138,7 +141,9 @@ export class SpotifyApiClient implements SpotifyClient {
     });
 
     const url = `${SPOTIFY_TOKEN_BASE}api/token?${params}`;
+    console.log(`[spotify] fetchToken: calling ${url.split("?")[0]}...`);
 
+    const t1 = Date.now();
     const resp = await fetch(url, {
       method: "GET",
       headers: {
@@ -156,9 +161,13 @@ export class SpotifyApiClient implements SpotifyClient {
         "Sec-CH-UA-Platform": '"macOS"',
         "Sec-CH-UA-Mobile": "?0",
       },
+      signal: AbortSignal.timeout(15_000),
     });
+    console.log(`[spotify] fetchToken: response ${resp.status} in ${Date.now() - t1}ms`);
 
     if (!resp.ok) {
+      const body = await resp.text().catch(() => "");
+      console.log(`[spotify] fetchToken: error body: ${body.slice(0, 200)}`);
       throw new Error(`Token request failed: HTTP ${resp.status}`);
     }
 
