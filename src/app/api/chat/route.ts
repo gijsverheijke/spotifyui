@@ -1,14 +1,14 @@
 import { AnthropicProvider } from "@/lib/ai/providers/anthropic";
 import { MinimaxProvider } from "@/lib/ai/providers/minimax";
 import { Orchestrator, type ToolHandler } from "@/lib/ai/orchestrator";
-import { getSession } from "@/lib/auth/session";
+import { getOrCreateSession } from "@/lib/auth/session";
 import { executeTool, spotifyTools } from "@/lib/spotify/tools";
 
 type ChatModel = "minimax" | "anthropic";
 
 interface ChatRequestBody {
   message?: unknown;
-  sessionId?: unknown;
+  accessToken?: unknown;
   model?: unknown;
 }
 
@@ -65,26 +65,23 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   const message = typeof body.message === "string" ? body.message.trim() : "";
-  const sessionId =
-    typeof body.sessionId === "string" ? body.sessionId.trim() : "";
+  const accessToken =
+    typeof body.accessToken === "string" ? body.accessToken.trim() : "";
   const model = body.model;
 
   if (!message) {
     return jsonError(400, "Missing message");
   }
 
-  if (!sessionId) {
-    return jsonError(400, "Missing sessionId");
+  if (!accessToken) {
+    return jsonError(400, "Missing accessToken");
   }
 
   if (model !== "minimax" && model !== "anthropic") {
     return jsonError(400, "Invalid model");
   }
 
-  const session = getSession(sessionId);
-  if (!session) {
-    return jsonError(401, "Invalid session");
-  }
+  const session = getOrCreateSession(accessToken);
 
   try {
     const provider = getProvider(model);

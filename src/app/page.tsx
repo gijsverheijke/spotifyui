@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import CookieInput from '@/components/CookieInput'
 import Chat, { type Message, type ChatModel } from '@/components/Chat'
 import GeneratedPage from '@/components/GeneratedPage'
@@ -12,10 +12,38 @@ interface UserProfile {
   avatar?: string
 }
 
-const SESSION_KEY = 'spotifyui_session_id'
+interface AuthState {
+  accessToken: string
+  expiresAt: number
+  spDc: string
+}
+
+const AUTH_KEY = 'spotifyui_auth'
+
+function loadAuth(): AuthState | null {
+  try {
+    const raw = localStorage.getItem(AUTH_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed.accessToken && parsed.expiresAt && parsed.spDc) {
+      return parsed as AuthState
+    }
+  } catch {
+    // ignore
+  }
+  return null
+}
+
+function saveAuth(auth: AuthState) {
+  localStorage.setItem(AUTH_KEY, JSON.stringify(auth))
+}
+
+function clearAuth() {
+  localStorage.removeItem(AUTH_KEY)
+}
 
 export default function Home() {
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  const [auth, setAuth] = useState<AuthState | null>(null)
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [authLoading, setAuthLoading] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
@@ -26,85 +54,126 @@ export default function Home() {
   const [model, setModel] = useState<ChatModel>('minimax')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { toasts, addToast, dismissToast } = useToast()
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const selectedHtml = messages.find((m) => m.id === selectedMessageId)?.html ?? null
 
   const clearSession = useCallback(() => {
-    localStorage.removeItem(SESSION_KEY)
-    setSessionId(null)
+    clearAuth()
+    setAuth(null)
     setProfile(null)
     setMessages([])
     setSelectedMessageId(null)
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current)
+      refreshTimerRef.current = null
+    }
   }, [])
 
+  // Schedule a token refresh 60s before expiry
+  const scheduleRefresh = useCallback((authState: AuthState) => {
+    if (refreshTimerRef.current) {
+      clearTimeout(refreshTimerRef.current)
+    }
+    const msUntilRefresh = authState.expiresAt - Date.now() - 60_000
+    if (msUntilRefresh <= 0) {
+      // Token is already expired or about to expire — refresh now
+      import('@/lib/spotify/browser-auth').then(({ exchangeToken }) =>
+        exchangeToken(authState.spDc)
+          .then((token) => {
+            const newAuth: AuthState = {
+              accessToken: token.accessToken,
+              expiresAt: token.expiresAt,
+              spDc: authState.spDc,
+            }
+            setAuth(newAuth)
+            saveAuth(newAuth)
+            scheduleRefresh(newAuth)
+          })
+          .catch(() => {
+            // Refresh failed — user will get an error on next action
+          }),
+      )
+      return
+    }
+    refreshTimerRef.current = setTimeout(() => {
+      import('@/lib/spotify/browser-auth').then(({ exchangeToken }) =>
+        exchangeToken(authState.spDc)
+          .then((token) => {
+            const newAuth: AuthState = {
+              accessToken: token.accessToken,
+              expiresAt: token.expiresAt,
+              spDc: authState.spDc,
+            }
+            setAuth(newAuth)
+            saveAuth(newAuth)
+            scheduleRefresh(newAuth)
+          })
+          .catch(() => {
+            // Refresh failed silently — next action will surface the error
+          }),
+      )
+    }, msUntilRefresh)
+  }, [])
+
+  // Restore session on mount
   useEffect(() => {
-    const stored = localStorage.getItem(SESSION_KEY)
+    const stored = loadAuth()
     if (!stored) {
       setRestoring(false)
       return
     }
 
-    fetch(`/api/auth/validate?sessionId=${encodeURIComponent(stored)}`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.valid) {
-          setSessionId(stored)
-          setProfile({
-            displayName: data.profile?.displayName ?? 'Spotify User',
-            avatar: data.profile?.avatar,
+    import('@/lib/spotify/browser-auth').then(({ tokenNeedsRefresh, exchangeToken }) => {
+      if (tokenNeedsRefresh(stored.expiresAt)) {
+        // Token expired — try to refresh
+        exchangeToken(stored.spDc)
+          .then((token) => {
+            const newAuth: AuthState = {
+              accessToken: token.accessToken,
+              expiresAt: token.expiresAt,
+              spDc: stored.spDc,
+            }
+            setAuth(newAuth)
+            saveAuth(newAuth)
+            setProfile({ displayName: 'Spotify User' })
+            scheduleRefresh(newAuth)
           })
-        } else {
-          localStorage.removeItem(SESSION_KEY)
-        }
-      })
-      .catch(() => {
-        localStorage.removeItem(SESSION_KEY)
-      })
-      .finally(() => {
+          .catch(() => {
+            clearAuth()
+          })
+          .finally(() => setRestoring(false))
+      } else {
+        setAuth(stored)
+        setProfile({ displayName: 'Spotify User' })
+        scheduleRefresh(stored)
         setRestoring(false)
-      })
-  }, [])
-
-  const handleCookieSubmit = useCallback(async (spDc: string) => {
-    setAuthLoading(true)
-    setAuthError(null)
-
-    try {
-      const res = await fetch('/api/auth/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sp_dc: spDc }),
-      })
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        throw new Error(data?.error ?? 'Failed to authenticate. Check your cookie and try again.')
       }
+    })
 
-      const data = await res.json()
-      const newSessionId = data.sessionId ?? null
-      setSessionId(newSessionId)
-      if (newSessionId) {
-        localStorage.setItem(SESSION_KEY, newSessionId)
+    return () => {
+      if (refreshTimerRef.current) {
+        clearTimeout(refreshTimerRef.current)
       }
-      setProfile({
-        displayName: data.profile?.displayName ?? 'Spotify User',
-        avatar: data.profile?.avatar,
-      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleAuthenticated = useCallback(
+    (accessToken: string, expiresAt: number, spDc: string) => {
+      const newAuth: AuthState = { accessToken, expiresAt, spDc }
+      setAuth(newAuth)
+      saveAuth(newAuth)
+      setProfile({ displayName: 'Spotify User' })
       setMessages([])
       setSelectedMessageId(null)
-    } catch (err) {
-      setSessionId(null)
-      setAuthError(err instanceof Error ? err.message : 'Authentication failed')
-    } finally {
-      setAuthLoading(false)
-    }
-  }, [])
+      setAuthError(null)
+      scheduleRefresh(newAuth)
+    },
+    [scheduleRefresh],
+  )
 
   const handleSend = useCallback(async (content: string) => {
-    if (!sessionId) {
-      return
-    }
+    if (!auth) return
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -116,12 +185,34 @@ export default function Home() {
     setChatLoading(true)
 
     try {
+      // Check if token needs refresh before sending
+      const { tokenNeedsRefresh, exchangeToken } = await import('@/lib/spotify/browser-auth')
+      let currentToken = auth.accessToken
+      if (tokenNeedsRefresh(auth.expiresAt)) {
+        try {
+          const token = await exchangeToken(auth.spDc)
+          const newAuth: AuthState = {
+            accessToken: token.accessToken,
+            expiresAt: token.expiresAt,
+            spDc: auth.spDc,
+          }
+          setAuth(newAuth)
+          saveAuth(newAuth)
+          scheduleRefresh(newAuth)
+          currentToken = token.accessToken
+        } catch {
+          addToast('Session expired. Please re-authenticate.', 'error')
+          clearSession()
+          return
+        }
+      }
+
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: content,
-          sessionId,
+          accessToken: currentToken,
           model,
         }),
       })
@@ -155,7 +246,7 @@ export default function Home() {
     } finally {
       setChatLoading(false)
     }
-  }, [model, sessionId, addToast, clearSession])
+  }, [model, auth, addToast, clearSession, scheduleRefresh])
 
   const handleSelectMessage = useCallback((msg: Message) => {
     setSelectedMessageId(msg.id)
@@ -174,12 +265,14 @@ export default function Home() {
   }
 
   // State 1: Not authenticated
-  if (!sessionId || !profile) {
+  if (!auth || !profile) {
     return (
       <CookieInput
-        onSubmit={handleCookieSubmit}
+        onAuthenticated={handleAuthenticated}
         isLoading={authLoading}
         error={authError}
+        onError={setAuthError}
+        onLoadingChange={setAuthLoading}
       />
     )
   }
