@@ -35,3 +35,7 @@ Spotify API integration inspired by [spogo](https://github.com/steipete/spogo) b
 ## Tech Stack
 
 Next.js 16 · React 19 · Tailwind CSS · Anthropic Claude / MiniMax
+
+## License
+
+MIT
