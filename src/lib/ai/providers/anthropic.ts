@@ -26,7 +26,7 @@ export class AnthropicProvider implements AIProvider {
 
   constructor(
     apiKey: string = process.env.ANTHROPIC_API_KEY ?? "",
-    model: string = "claude-sonnet-4-20250514",
+    model: string = "claude-sonnet-4-6",
   ) {
     this.apiKey = apiKey;
     this.model = model;
