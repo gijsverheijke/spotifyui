@@ -23,30 +23,70 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
- * TOTP secret and version for Spotify token exchange.
- * Set via environment variables SPOTIFY_TOTP_SECRET (comma-separated byte values)
- * and SPOTIFY_TOTP_VERSION (integer).
+ * Spotify rotates TOTP secrets periodically. The thetadev.de repo tracks the
+ * current secret so we don't have to ship updates every time it changes.
+ * Priority: SPOTIFY_TOTP_SECRET env var → remote fetch → hardcoded fallback.
  */
-function getTotpConfig(): { version: number; secret: Uint8Array } {
+
+const FALLBACK_TOTP_SECRET = new Uint8Array([
+  70, 60, 33, 57, 92, 120, 90, 33, 32, 62, 62, 55, 126, 93, 66, 35, 108, 68,
+]);
+const FALLBACK_TOTP_VERSION = 18;
+
+const TOTP_SECRET_URL =
+  "https://code.thetadev.de/ThetaDev/spotify-secrets/raw/branch/main/secrets/secretDict.json";
+
+let cachedTotp: {
+  version: number;
+  secret: Uint8Array;
+  expiresAt: number;
+} | null = null;
+
+async function fetchTotpSecret(): Promise<{
+  version: number;
+  secret: Uint8Array;
+}> {
+  // 1. Env var override (comma-separated byte values)
   const secretEnv = process.env.SPOTIFY_TOTP_SECRET;
-  const versionEnv = process.env.SPOTIFY_TOTP_VERSION;
-
-  if (!secretEnv) {
-    throw new Error(
-      "SPOTIFY_TOTP_SECRET environment variable is required. " +
-        "Set it to a comma-separated list of byte values (e.g. '70,60,33,57').",
-    );
+  if (secretEnv) {
+    const bytes = secretEnv.split(",").map((s) => parseInt(s.trim(), 10));
+    if (!bytes.some(isNaN) && bytes.length > 0) {
+      const versionEnv = process.env.SPOTIFY_TOTP_VERSION;
+      return {
+        version: versionEnv ? parseInt(versionEnv, 10) : 5,
+        secret: new Uint8Array(bytes),
+      };
+    }
   }
 
-  const bytes = secretEnv.split(",").map((s) => parseInt(s.trim(), 10));
-  if (bytes.some(isNaN)) {
-    throw new Error("SPOTIFY_TOTP_SECRET contains invalid byte values");
+  // 2. Remote fetch with 15-minute cache
+  const now = Date.now();
+  if (cachedTotp && now < cachedTotp.expiresAt) {
+    return { version: cachedTotp.version, secret: cachedTotp.secret };
+  }
+  try {
+    const resp = await fetch(TOTP_SECRET_URL, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = (await resp.json()) as Record<string, number[]>;
+    const versions = Object.keys(data)
+      .map(Number)
+      .sort((a, b) => b - a);
+    for (const v of versions) {
+      const arr = data[String(v)];
+      if (arr?.length > 0) {
+        const secret = new Uint8Array(arr);
+        cachedTotp = { version: v, secret, expiresAt: now + 15 * 60 * 1000 };
+        return { version: v, secret };
+      }
+    }
+  } catch {
+    // fall through to fallback
   }
 
-  return {
-    version: versionEnv ? parseInt(versionEnv, 10) : 5,
-    secret: new Uint8Array(bytes),
-  };
+  // 3. Hardcoded fallback (may become stale if Spotify rotates)
+  return { version: FALLBACK_TOTP_VERSION, secret: FALLBACK_TOTP_SECRET };
 }
 
 const TOTP_STEP_SECONDS = 30;
@@ -84,10 +124,10 @@ export function totpFromSecret(secret: Uint8Array, now: Date): string {
   return String(otp).padStart(TOTP_DIGITS, "0");
 }
 
-export function generateTOTP(
+export async function generateTOTP(
   now: Date,
-): { code: string; version: number } {
-  const { version, secret } = getTotpConfig();
+): Promise<{ code: string; version: number }> {
+  const { version, secret } = await fetchTotpSecret();
   const code = totpFromSecret(secret, now);
   return { code, version };
 }
@@ -129,7 +169,7 @@ export class SpotifyApiClient implements SpotifyClient {
   }
 
   private async fetchToken(): Promise<string> {
-    const { code, version } = generateTOTP(new Date());
+    const { code, version } = await generateTOTP(new Date());
     const params = new URLSearchParams({
       reason: "init",
       productType: "web-player",
@@ -712,5 +752,60 @@ export class SpotifyApiClient implements SpotifyClient {
     const albums = (albumsResult.items as unknown[]) ?? [];
     if (albums.length > 0) return albums[0];
     throw new Error(`Album ${albumId} not found`);
+  }
+
+  async createPlaylist(
+    name: string,
+    description?: string,
+    trackUris?: string[],
+  ): Promise<unknown> {
+    const accessToken = await this.getAccessToken();
+    const userId = await this.getUserId();
+
+    // Create playlist via Spotify REST API
+    const createResp = await fetch(
+      `https://api.spotify.com/v1/users/${encodeURIComponent(userId)}/playlists`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        body: JSON.stringify({
+          name,
+          description: description ?? "",
+          public: false,
+        }),
+        signal: AbortSignal.timeout(15_000),
+      },
+    );
+    if (!createResp.ok) {
+      throw new Error(`Failed to create playlist: HTTP ${createResp.status}`);
+    }
+    const playlist = (await createResp.json()) as Record<string, unknown>;
+
+    // Add tracks if provided
+    if (trackUris && trackUris.length > 0) {
+      const playlistId = playlist.id as string;
+      const addResp = await fetch(
+        `https://api.spotify.com/v1/playlists/${playlistId}/tracks`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+          },
+          body: JSON.stringify({ uris: trackUris }),
+          signal: AbortSignal.timeout(15_000),
+        },
+      );
+      if (!addResp.ok) {
+        throw new Error(`Failed to add tracks: HTTP ${addResp.status}`);
+      }
+    }
+
+    return playlist;
   }
 }
