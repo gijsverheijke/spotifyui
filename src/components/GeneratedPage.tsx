@@ -44,6 +44,8 @@ export default function GeneratedPage({ html }: GeneratedPageProps) {
   const [iframeHeight, setIframeHeight] = useState<number | null>(null)
 
   const handleMessage = useCallback((e: MessageEvent) => {
+    // Only accept messages from our sandboxed iframe (origin is 'null' for sandbox without allow-same-origin)
+    if (e.source !== iframeRef.current?.contentWindow) return
     if (e.data?.type === 'iframe-height' && typeof e.data.height === 'number') {
       setIframeHeight(e.data.height)
     }
@@ -91,7 +93,7 @@ export default function GeneratedPage({ html }: GeneratedPageProps) {
       <iframe
         ref={iframeRef}
         srcDoc={injectHeightReporter(html)}
-        sandbox="allow-scripts allow-same-origin"
+        sandbox="allow-scripts"
         title="Generated page"
         className="w-full border-0"
         style={{ height: iframeHeight ? `${iframeHeight}px` : '100%' }}
