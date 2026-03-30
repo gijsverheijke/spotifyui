@@ -32,7 +32,6 @@ function makeSpotifyClient(): SpotifyClient {
     getTracks: vi.fn(async () => ({ tracks: [] })),
     getArtists: vi.fn(async () => ({ artists: [] })),
     getAlbum: vi.fn(async () => ({ id: "alb1" })),
-    createPlaylist: vi.fn(async () => ({ id: "pl-new", name: "New Playlist" })),
   };
 }
 

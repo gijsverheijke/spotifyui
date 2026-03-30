@@ -217,27 +217,13 @@ const getPlaylist = defineTool(
 );
 
 // ---------------------------------------------------------------------------
-// 13. create_playlist
-// ---------------------------------------------------------------------------
-
-const createPlaylist = defineTool(
-  "create_playlist",
-  "Creates a new playlist on the user's Spotify account and optionally adds tracks to it.",
-  z.object({
-    name: z.string().describe("Name for the new playlist"),
-    description: z.string().optional().describe("Optional description for the playlist"),
-    track_uris: z
-      .array(z.string())
-      .optional()
-      .describe("Optional array of Spotify track URIs (e.g. 'spotify:track:xxx') to add to the playlist"),
-  }),
-  async (client, params) =>
-    client.createPlaylist(params.name, params.description, params.track_uris),
-);
-
-// ---------------------------------------------------------------------------
 // Master exports
 // ---------------------------------------------------------------------------
+
+// NOTE: create_playlist and add_tracks_to_playlist have been removed.
+// These write operations are not available via the Pathfinder GraphQL API
+// (which only supports reads). The REST API (api.spotify.com/v1/) is blocked
+// for web player tokens.
 
 const allTools: Tool[] = [
   getUserProfile,
@@ -252,7 +238,6 @@ const allTools: Tool[] = [
   getAlbum,
   getUserPlaylists,
   getPlaylist,
-  createPlaylist,
 ];
 
 /** Tool definitions formatted for the Anthropic tools API. */
