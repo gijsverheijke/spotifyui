@@ -10,11 +10,12 @@ interface CookieInputProps {
 
 export default function CookieInput({ onSubmit, isLoading, error }: CookieInputProps) {
   const [cookie, setCookie] = useState('')
+  const [accepted, setAccepted] = useState(false)
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = cookie.trim()
-    if (trimmed) {
+    if (trimmed && accepted) {
       onSubmit(trimmed)
     }
   }
@@ -52,9 +53,27 @@ export default function CookieInput({ onSubmit, isLoading, error }: CookieInputP
             <p className="text-sm text-red-400">{error}</p>
           )}
 
+          <div className="space-y-2 rounded-lg border border-zinc-700 bg-zinc-800/50 p-4 text-xs text-zinc-400">
+            <p>By continuing you acknowledge that:</p>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>This app uses your cookie to access Spotify&apos;s <strong className="text-zinc-300">internal web API</strong>. This is not officially supported and may violate Spotify&apos;s terms of service.</li>
+              <li>The AI has <strong className="text-zinc-300">read-only access</strong> to your Spotify data. It will not create, modify, or delete anything in your account.</li>
+              <li>The creator of this proof of concept accepts <strong className="text-zinc-300">no liability</strong> for lost data or loss of access to your Spotify account.</li>
+            </ul>
+            <label className="flex items-start gap-2 pt-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-zinc-600 bg-zinc-700 text-emerald-500 focus:ring-emerald-500 accent-emerald-500"
+              />
+              <span className="text-zinc-300">I understand and want to continue</span>
+            </label>
+          </div>
+
           <button
             type="submit"
-            disabled={isLoading || !cookie.trim()}
+            disabled={isLoading || !cookie.trim() || !accepted}
             className="w-full rounded-lg bg-emerald-600 px-4 py-3 text-sm font-medium text-white transition-colors hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isLoading ? 'Connecting...' : 'Connect'}
