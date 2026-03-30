@@ -7,7 +7,10 @@ interface GeneratedPageProps {
 }
 
 function injectHeightReporter(html: string): string {
+  const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; img-src * data: blob:; font-src * data:; style-src * 'unsafe-inline'; script-src * 'unsafe-inline' 'unsafe-eval';">`
+
   const overrideStyle = `
+${cspMeta}
 <style>
   html, body { min-height: auto !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
   body > *:first-child { min-height: auto !important; }

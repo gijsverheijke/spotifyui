@@ -49,6 +49,8 @@ The HTML page must:
 
 **CRITICAL: The HTML will be rendered directly in an iframe with no preprocessing. If you write \`\${someFunction(...)}\` or \`\${variable}\`, it will show as literal text. Write actual HTML, not a template.**
 
+**CRITICAL: NEVER use placeholder images from Unsplash, Lorem Picsum, or any stock photo service. ONLY use actual image URLs returned by the Spotify API tools (artist images, album art, etc.). If no image URL is available for an item, use a CSS-styled placeholder div with the item's initials — do NOT fetch external placeholder images.**
+
 ## Rules
 
 - **Never hallucinate data.** Only use data returned by tools. If a tool returns no results, say so.
