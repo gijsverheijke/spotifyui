@@ -1,6 +1,6 @@
 import type { AIProvider, AIMessage, ToolDefinition, ToolCall } from "./types";
 import type { SpotifyClient } from "../spotify/types";
-import { SYSTEM_PROMPT } from "./prompts";
+import { SYSTEM_PROMPT, VALIDATION_PROMPT } from "./prompts";
 
 const MAX_TOOL_ROUNDS = 10;
 
@@ -99,7 +99,17 @@ export class Orchestrator {
           content: response.content,
         });
 
-        const html = extractHtml(response.content);
+        let html = extractHtml(response.content);
+
+        // Validation pass — have the model QA its own HTML
+        if (html) {
+          onEvent?.({
+            type: "generating",
+            content: "Quality checking...",
+          });
+          html = await this.validateHtml(html);
+        }
+
         return { html, messages };
       }
     }
@@ -139,6 +149,28 @@ export class Orchestrator {
     }
 
     return results;
+  }
+
+  private async validateHtml(html: string): Promise<string> {
+    try {
+      const response = await this.provider.chat(
+        [{ role: "user", content: html }],
+        [],
+        VALIDATION_PROMPT,
+      );
+
+      const content = response.content.trim();
+      if (content === "LGTM") {
+        return html;
+      }
+
+      // Try to extract fixed HTML
+      const fixed = extractHtml(content);
+      return fixed ?? html;
+    } catch {
+      // Validation failed — return original
+      return html;
+    }
   }
 }
 
