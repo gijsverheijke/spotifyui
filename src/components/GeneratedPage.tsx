@@ -42,6 +42,16 @@ export default function GeneratedPage({ html }: GeneratedPageProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const [loading, setLoading] = useState(false)
   const [iframeHeight, setIframeHeight] = useState<number | null>(null)
+  const [prevHtml, setPrevHtml] = useState<string | null>(null)
+
+  // Reset loading/height when html changes (render-time state adjustment)
+  if (html !== prevHtml) {
+    setPrevHtml(html)
+    if (html) {
+      setLoading(true)
+      setIframeHeight(null)
+    }
+  }
 
   const handleMessage = useCallback((e: MessageEvent) => {
     // Only accept messages from our sandboxed iframe (origin is 'null' for sandbox without allow-same-origin)
@@ -55,13 +65,6 @@ export default function GeneratedPage({ html }: GeneratedPageProps) {
     window.addEventListener('message', handleMessage)
     return () => window.removeEventListener('message', handleMessage)
   }, [handleMessage])
-
-  useEffect(() => {
-    if (html) {
-      setLoading(true)
-      setIframeHeight(null)
-    }
-  }, [html])
 
   const handleLoad = useCallback(() => {
     setLoading(false)

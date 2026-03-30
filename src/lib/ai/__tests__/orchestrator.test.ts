@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { Orchestrator, extractHtml } from "../orchestrator";
-import type { AIProvider, AIResponse, ToolDefinition } from "../types";
+import type { AIProvider, AIResponse } from "../types";
 import type { ToolHandler } from "../orchestrator";
 import type { SpotifyClient } from "../../spotify/types";
 

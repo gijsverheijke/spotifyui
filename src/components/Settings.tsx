@@ -98,11 +98,16 @@ export default function Settings({ open, onClose, onKeysChange, keys }: Settings
   const [minimax, setMinimax] = useState(keys.minimax)
   const [anthropic, setAnthropic] = useState(keys.anthropic)
   const panelRef = useRef<HTMLDivElement>(null)
+  const [prevKeys, setPrevKeys] = useState(keys)
+  const [prevOpen, setPrevOpen] = useState(open)
 
-  useEffect(() => {
+  // Sync local state with props when keys or open changes (render-time state adjustment)
+  if (keys !== prevKeys || open !== prevOpen) {
+    setPrevKeys(keys)
+    setPrevOpen(open)
     setMinimax(keys.minimax)
     setAnthropic(keys.anthropic)
-  }, [keys, open])
+  }
 
   useEffect(() => {
     if (!open) return

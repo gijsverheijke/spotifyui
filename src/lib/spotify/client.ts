@@ -7,13 +7,11 @@ import {
   PathfinderHashError,
   getNestedMap,
   extractImages,
-  extractArtistList,
   extractSearchCategory,
   extractLibraryItems,
   extractPlaylistTracks,
   extractHomeSections,
   collectItemsByKind,
-  normalizeTrack,
   normalizeArtist,
   normalizeAlbum,
   normalizePlaylistSimplified,
@@ -471,7 +469,6 @@ export class SpotifyApiClient implements SpotifyClient {
 
   async getFollowedArtists(
     limit: number,
-    _after?: string,
   ): Promise<unknown> {
     // Use libraryV3 with "Artists" filter — pathfinder has no direct equivalent
     // of the REST followed artists endpoint.

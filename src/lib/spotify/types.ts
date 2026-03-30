@@ -231,7 +231,7 @@ export interface SpotifyArtistTopTracksResponse {
   tracks: SpotifyTrack[];
 }
 
-export interface SpotifyCreatePlaylistResponse extends SpotifyPlaylist {}
+export type SpotifyCreatePlaylistResponse = SpotifyPlaylist;
 
 export interface SpotifyAddTracksResponse {
   snapshot_id: string;
@@ -253,7 +253,7 @@ export interface SpotifyClient {
   getTopItems(type: string, timeRange: string, limit: number): Promise<unknown>;
   getRecentlyPlayed(limit: number): Promise<unknown>;
   getSavedTracks(limit: number, offset: number): Promise<unknown>;
-  getFollowedArtists(limit: number, after?: string): Promise<unknown>;
+  getFollowedArtists(limit: number): Promise<unknown>;
   getUserPlaylists(limit: number, offset: number): Promise<unknown>;
   getPlaylist(playlistId: string): Promise<unknown>;
   getArtistTopTracks(artistId: string): Promise<unknown>;

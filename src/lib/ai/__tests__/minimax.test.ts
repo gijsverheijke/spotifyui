@@ -31,7 +31,7 @@ describe("MinimaxProvider", () => {
     );
 
     expect(mockFetch).toHaveBeenCalledWith(
-      "https://api.minimax.chat/v1/text/chatcompletion_v2",
+      "https://api.minimax.io/v1/text/chatcompletion_v2",
       expect.objectContaining({
         method: "POST",
         headers: expect.objectContaining({
