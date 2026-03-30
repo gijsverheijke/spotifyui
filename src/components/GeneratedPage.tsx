@@ -7,6 +7,12 @@ interface GeneratedPageProps {
 }
 
 function injectHeightReporter(html: string): string {
+  const overrideStyle = `
+<style>
+  html, body { min-height: auto !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; }
+  body > *:first-child { min-height: auto !important; }
+</style>`
+
   const script = `
 <script>
 (function() {
@@ -19,6 +25,12 @@ function injectHeightReporter(html: string): string {
   setTimeout(reportHeight, 100);
 })();
 </script>`
+
+  if (html.includes('</head>')) {
+    html = html.replace('</head>', overrideStyle + '</head>')
+  } else {
+    html = overrideStyle + html
+  }
 
   if (html.includes('</body>')) {
     return html.replace('</body>', script + '</body>')
