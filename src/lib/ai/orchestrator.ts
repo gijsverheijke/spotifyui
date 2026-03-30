@@ -17,6 +17,14 @@ export interface OrchestratorResult {
   messages: AIMessage[];
 }
 
+export type StreamEvent =
+  | { type: "tool_call"; content: string }
+  | { type: "tool_result"; content: string }
+  | { type: "generating"; content: string }
+  | { type: "done"; html: string | null; message: string };
+
+export type StreamCallback = (event: StreamEvent) => void;
+
 export class Orchestrator {
   private provider: AIProvider;
   private tools: ToolHandler[];
@@ -35,6 +43,7 @@ export class Orchestrator {
   async chat(
     userMessage: string,
     conversationHistory: AIMessage[],
+    onEvent?: StreamCallback,
   ): Promise<OrchestratorResult> {
     const messages: AIMessage[] = [
       ...conversationHistory,
@@ -51,6 +60,13 @@ export class Orchestrator {
       );
 
       if (response.toolCalls && response.toolCalls.length > 0) {
+        // Notify about tool calls
+        const toolNames = response.toolCalls.map((tc) => tc.name).join(", ");
+        onEvent?.({
+          type: "tool_call",
+          content: `Calling ${toolNames}...`,
+        });
+
         // Add assistant message with tool calls
         messages.push({
           role: "assistant",
@@ -66,8 +82,18 @@ export class Orchestrator {
           content: "",
           toolResults,
         });
+
+        onEvent?.({
+          type: "tool_result",
+          content: `Got results from ${toolNames}`,
+        });
       } else {
         // Final text response — extract HTML
+        onEvent?.({
+          type: "generating",
+          content: "Building your page...",
+        });
+
         messages.push({
           role: "assistant",
           content: response.content,

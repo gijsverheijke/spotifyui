@@ -23,6 +23,7 @@ export default function Home() {
   const [messages, setMessages] = useState<Message[]>([])
   const [selectedMessageId, setSelectedMessageId] = useState<string | null>(null)
   const [chatLoading, setChatLoading] = useState(false)
+  const [streamingSteps, setStreamingSteps] = useState<string[]>([])
   const [model, setModel] = useState<ChatModel>('minimax')
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { toasts, addToast, dismissToast } = useToast()
@@ -114,6 +115,7 @@ export default function Home() {
 
     setMessages((prev) => [...prev, userMessage])
     setChatLoading(true)
+    setStreamingSteps([])
 
     try {
       const res = await fetch('/api/chat', {
@@ -136,24 +138,57 @@ export default function Home() {
         throw new Error(data?.error ?? 'Something went wrong')
       }
 
-      const data = await res.json()
-
-      const assistantMessage: Message = {
-        id: crypto.randomUUID(),
-        role: 'assistant',
-        content: data.message ?? 'Here you go!',
-        html: data.html,
+      const reader = res.body?.getReader()
+      if (!reader) {
+        throw new Error('No response stream')
       }
 
-      setMessages((prev) => [...prev, assistantMessage])
+      const decoder = new TextDecoder()
+      let buffer = ''
 
-      if (data.html) {
-        setSelectedMessageId(assistantMessage.id)
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() ?? ''
+
+        for (const line of lines) {
+          const dataLine = line.trim()
+          if (!dataLine.startsWith('data: ')) continue
+          const json = dataLine.slice(6)
+
+          try {
+            const event = JSON.parse(json)
+
+            if (event.type === 'tool_call' || event.type === 'tool_result' || event.type === 'generating') {
+              setStreamingSteps((prev) => [...prev, event.content])
+            } else if (event.type === 'done') {
+              const assistantMessage: Message = {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: event.message ?? 'Here you go!',
+                html: event.html ?? undefined,
+              }
+
+              setMessages((prev) => [...prev, assistantMessage])
+
+              if (event.html) {
+                setSelectedMessageId(assistantMessage.id)
+              }
+            }
+          } catch {
+            // skip malformed events
+          }
+        }
       }
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Something went wrong. Please try again.', 'error')
     } finally {
       setChatLoading(false)
+      setStreamingSteps([])
     }
   }, [model, sessionId, addToast, clearSession])
 
@@ -206,6 +241,7 @@ export default function Home() {
           onSelectMessage={handleSelectMessage}
           selectedMessageId={selectedMessageId}
           isLoading={chatLoading}
+          streamingSteps={streamingSteps}
           userName={profile.displayName}
           userAvatar={profile.avatar}
           model={model}

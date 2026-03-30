@@ -1,6 +1,6 @@
 import { AnthropicProvider } from "@/lib/ai/providers/anthropic";
 import { MinimaxProvider } from "@/lib/ai/providers/minimax";
-import { Orchestrator, type ToolHandler } from "@/lib/ai/orchestrator";
+import { Orchestrator, type ToolHandler, type StreamEvent } from "@/lib/ai/orchestrator";
 import { getSession } from "@/lib/auth/session";
 import { executeTool, spotifyTools } from "@/lib/spotify/tools";
 
@@ -86,28 +86,60 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(401, "Invalid session");
   }
 
-  try {
-    const provider = getProvider(model);
-    const orchestrator = new Orchestrator(
-      provider,
-      buildToolHandlers(),
-      session.client,
-    );
-    const result = await orchestrator.chat(message, session.messages);
+  const encoder = new TextEncoder();
 
-    session.messages = result.messages;
+  const stream = new ReadableStream({
+    async start(controller) {
+      function send(event: StreamEvent) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      }
 
-    const lastAssistantMessage =
-      result.messages.findLast((entry) => entry.role === "assistant")?.content ?? "";
+      try {
+        const provider = getProvider(model);
+        const orchestrator = new Orchestrator(
+          provider,
+          buildToolHandlers(),
+          session.client,
+        );
+        const result = await orchestrator.chat(
+          message,
+          session.messages,
+          send,
+        );
 
-    return Response.json({
-      message: getAssistantMessage(lastAssistantMessage, result.html),
-      html: result.html,
-    });
-  } catch (error) {
-    console.error("[chat] error:", error);
-    const message =
-      error instanceof Error ? error.message : "Chat request failed";
-    return jsonError(500, message);
-  }
+        session.messages = result.messages;
+
+        const lastAssistantMessage =
+          result.messages.findLast((entry) => entry.role === "assistant")
+            ?.content ?? "";
+
+        send({
+          type: "done",
+          html: result.html,
+          message: getAssistantMessage(lastAssistantMessage, result.html),
+        });
+      } catch (error) {
+        console.error("[chat] error:", error);
+        const errorMessage =
+          error instanceof Error ? error.message : "Chat request failed";
+        send({
+          type: "done",
+          html: null,
+          message: errorMessage,
+        });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    },
+  });
 }

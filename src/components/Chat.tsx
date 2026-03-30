@@ -17,6 +17,7 @@ interface ChatProps {
   onSelectMessage: (message: Message) => void
   selectedMessageId: string | null
   isLoading: boolean
+  streamingSteps: string[]
   userName?: string
   userAvatar?: string
   model: ChatModel
@@ -30,6 +31,7 @@ export default function Chat({
   onSelectMessage,
   selectedMessageId,
   isLoading,
+  streamingSteps,
   userName,
   userAvatar,
   model,
@@ -181,6 +183,15 @@ export default function Chat({
                   <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-500 [animation-delay:150ms]" />
                   <span className="h-2 w-2 animate-bounce rounded-full bg-zinc-500 [animation-delay:300ms]" />
                 </div>
+                {streamingSteps.length > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    {streamingSteps.map((step, i) => (
+                      <p key={i} className={`text-xs italic ${i === streamingSteps.length - 1 ? 'text-zinc-400' : 'text-zinc-600'}`}>
+                        {step}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}
