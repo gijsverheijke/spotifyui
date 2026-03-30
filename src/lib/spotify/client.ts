@@ -24,49 +24,31 @@ import {
 // Constants
 // ---------------------------------------------------------------------------
 
-const FALLBACK_TOTP_SECRET = new Uint8Array([
-  70, 60, 33, 57, 92, 120, 90, 33, 32, 62, 62, 55, 126, 93, 66, 35, 108, 68,
-]);
-const FALLBACK_TOTP_VERSION = 18;
+/**
+ * TOTP secret and version for Spotify token exchange.
+ * Set via environment variables SPOTIFY_TOTP_SECRET (comma-separated byte values)
+ * and SPOTIFY_TOTP_VERSION (integer).
+ */
+function getTotpConfig(): { version: number; secret: Uint8Array } {
+  const secretEnv = process.env.SPOTIFY_TOTP_SECRET;
+  const versionEnv = process.env.SPOTIFY_TOTP_VERSION;
 
-const TOTP_SECRET_URL =
-  "https://code.thetadev.de/ThetaDev/spotify-secrets/raw/branch/main/secrets/secretDict.json";
-
-let cachedTotp: {
-  version: number;
-  secret: Uint8Array;
-  expiresAt: number;
-} | null = null;
-
-async function fetchTotpSecret(): Promise<{
-  version: number;
-  secret: Uint8Array;
-}> {
-  const now = Date.now();
-  if (cachedTotp && now < cachedTotp.expiresAt) {
-    return { version: cachedTotp.version, secret: cachedTotp.secret };
+  if (!secretEnv) {
+    throw new Error(
+      "SPOTIFY_TOTP_SECRET environment variable is required. " +
+        "Set it to a comma-separated list of byte values (e.g. '70,60,33,57').",
+    );
   }
-  try {
-    const resp = await fetch(TOTP_SECRET_URL, {
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const data = (await resp.json()) as Record<string, number[]>;
-    const versions = Object.keys(data)
-      .map(Number)
-      .sort((a, b) => b - a);
-    for (const v of versions) {
-      const arr = data[String(v)];
-      if (arr?.length > 0) {
-        const secret = new Uint8Array(arr);
-        cachedTotp = { version: v, secret, expiresAt: now + 15 * 60 * 1000 };
-        return { version: v, secret };
-      }
-    }
-  } catch {
-    // fall through to fallback
+
+  const bytes = secretEnv.split(",").map((s) => parseInt(s.trim(), 10));
+  if (bytes.some(isNaN)) {
+    throw new Error("SPOTIFY_TOTP_SECRET contains invalid byte values");
   }
-  return { version: FALLBACK_TOTP_VERSION, secret: FALLBACK_TOTP_SECRET };
+
+  return {
+    version: versionEnv ? parseInt(versionEnv, 10) : 5,
+    secret: new Uint8Array(bytes),
+  };
 }
 
 const TOTP_STEP_SECONDS = 30;
@@ -104,10 +86,10 @@ export function totpFromSecret(secret: Uint8Array, now: Date): string {
   return String(otp).padStart(TOTP_DIGITS, "0");
 }
 
-export async function generateTOTP(
+export function generateTOTP(
   now: Date,
-): Promise<{ code: string; version: number }> {
-  const { version, secret } = await fetchTotpSecret();
+): { code: string; version: number } {
+  const { version, secret } = getTotpConfig();
   const code = totpFromSecret(secret, now);
   return { code, version };
 }
@@ -149,12 +131,7 @@ export class SpotifyApiClient implements SpotifyClient {
   }
 
   private async fetchToken(): Promise<string> {
-    console.log("[spotify] fetchToken: generating TOTP...");
-    const t0 = Date.now();
-    const { code, version } = await generateTOTP(new Date());
-    console.log(
-      `[spotify] fetchToken: TOTP generated (v${version}) in ${Date.now() - t0}ms`,
-    );
+    const { code, version } = generateTOTP(new Date());
     const params = new URLSearchParams({
       reason: "init",
       productType: "web-player",
