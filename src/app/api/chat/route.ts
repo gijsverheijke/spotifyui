@@ -11,22 +11,23 @@ interface ChatRequestBody {
   message?: unknown;
   sessionId?: unknown;
   model?: unknown;
+  userApiKey?: unknown;
 }
 
 function jsonError(status: number, message: string): Response {
   return Response.json({ error: message }, { status });
 }
 
-function getProvider(model: ChatModel) {
+function getProvider(model: ChatModel, userApiKey?: string) {
   if (model === "anthropic") {
-    const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
+    const apiKey = userApiKey || process.env.ANTHROPIC_API_KEY || "";
     if (!apiKey) {
       throw new Error("ANTHROPIC_API_KEY is not configured");
     }
     return new AnthropicProvider(apiKey);
   }
 
-  const apiKey = process.env.MINIMAX_API_KEY ?? "";
+  const apiKey = userApiKey || process.env.MINIMAX_API_KEY || "";
   if (!apiKey) {
     throw new Error("MINIMAX_API_KEY is not configured");
   }
@@ -82,17 +83,23 @@ export async function POST(request: Request): Promise<Response> {
     return jsonError(400, "Invalid model");
   }
 
+  const userApiKey =
+    typeof body.userApiKey === "string" ? body.userApiKey.trim() : "";
+  const usingOwnKey = userApiKey.length > 0;
+
   const session = getSession(sessionId);
   if (!session) {
     return jsonError(401, "Invalid session");
   }
 
-  const rl = checkRateLimit();
-  if (!rl.allowed) {
-    return jsonError(
-      429,
-      `Daily limit reached (${rl.used}/${rl.limit}). Add your own API key in settings to continue.`,
-    );
+  if (!usingOwnKey) {
+    const rl = checkRateLimit();
+    if (!rl.allowed) {
+      return jsonError(
+        429,
+        `Daily limit reached (${rl.used}/${rl.limit}). Add your own API key in settings to continue.`,
+      );
+    }
   }
 
   const encoder = new TextEncoder();
@@ -106,7 +113,7 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       try {
-        const provider = getProvider(model);
+        const provider = getProvider(model, usingOwnKey ? userApiKey : undefined);
         const orchestrator = new Orchestrator(
           provider,
           buildToolHandlers(),

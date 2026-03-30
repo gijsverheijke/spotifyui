@@ -23,6 +23,8 @@ interface ChatProps {
   model: ChatModel
   onModelChange: (model: ChatModel) => void
   onMenuClick?: () => void
+  onSettingsClick?: () => void
+  keyStatus?: string
 }
 
 export default function Chat({
@@ -37,6 +39,8 @@ export default function Chat({
   model,
   onModelChange,
   onMenuClick,
+  onSettingsClick,
+  keyStatus,
 }: ChatProps) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -99,6 +103,9 @@ export default function Chat({
             <p className="truncate text-xs text-zinc-400">{userName}</p>
           )}
         </div>
+        {keyStatus && (
+          <span className="hidden text-xs text-zinc-500 sm:inline">{keyStatus}</span>
+        )}
         <select
           value={model}
           onChange={(e) => onModelChange(e.target.value as ChatModel)}
@@ -107,6 +114,18 @@ export default function Chat({
           <option value="anthropic">Anthropic</option>
           <option value="minimax">MiniMax</option>
         </select>
+        {onSettingsClick && (
+          <button
+            onClick={onSettingsClick}
+            className="rounded p-1 text-zinc-400 hover:text-white"
+            aria-label="Settings"
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+              <path d="M7.5 2.25h3l.375 1.875.975.525 1.8-.675 1.5 2.6-1.425 1.2v1.05l1.425 1.2-1.5 2.6-1.8-.675-.975.525L10.5 15.75h-3l-.375-1.875-.975-.525-1.8.675-1.5-2.6 1.425-1.2V9.175l-1.425-1.2 1.5-2.6 1.8.675.975-.525L7.5 2.25z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round"/>
+              <circle cx="9" cy="9" r="2.25" stroke="currentColor" strokeWidth="1.2"/>
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Messages */}

@@ -6,6 +6,7 @@ import Chat, { type Message, type ChatModel } from '@/components/Chat'
 import GeneratedPage from '@/components/GeneratedPage'
 import Sidebar from '@/components/Sidebar'
 import Toast, { useToast } from '@/components/Toast'
+import Settings, { type UserKeys, loadUserKeys } from '@/components/Settings'
 
 interface UserProfile {
   displayName: string
@@ -26,9 +27,27 @@ export default function Home() {
   const [streamingSteps, setStreamingSteps] = useState<string[]>([])
   const [model, setModel] = useState<ChatModel>('minimax')
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [userKeys, setUserKeys] = useState<UserKeys>({ minimax: '', anthropic: '' })
+  const [rateLimitStatus, setRateLimitStatus] = useState<{ used: number; limit: number } | null>(null)
   const { toasts, addToast, dismissToast } = useToast()
 
   const selectedHtml = messages.find((m) => m.id === selectedMessageId)?.html ?? null
+
+  useEffect(() => {
+    setUserKeys(loadUserKeys())
+  }, [])
+
+  const fetchRateLimitStatus = useCallback(() => {
+    fetch('/api/ratelimit')
+      .then((r) => r.json())
+      .then((data) => setRateLimitStatus(data))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    fetchRateLimitStatus()
+  }, [fetchRateLimitStatus])
 
   const clearSession = useCallback(() => {
     localStorage.removeItem(SESSION_KEY)
@@ -125,6 +144,7 @@ export default function Home() {
           message: content,
           sessionId,
           model,
+          userApiKey: userKeys[model] || undefined,
         }),
       })
 
@@ -192,8 +212,9 @@ export default function Home() {
     } finally {
       setChatLoading(false)
       setStreamingSteps([])
+      fetchRateLimitStatus()
     }
-  }, [model, sessionId, addToast, clearSession])
+  }, [model, sessionId, userKeys, addToast, clearSession, fetchRateLimitStatus])
 
   const handleSelectMessage = useCallback((msg: Message) => {
     setSelectedMessageId(msg.id)
@@ -222,10 +243,23 @@ export default function Home() {
     )
   }
 
+  const activeKeyForModel = userKeys[model]
+  const keyStatus = activeKeyForModel
+    ? 'Using your key'
+    : rateLimitStatus
+      ? `Shared key (${rateLimitStatus.used}/${rateLimitStatus.limit} today)`
+      : 'Shared key'
+
   // State 2: Authenticated — chat + generated page
   return (
     <div className="flex h-screen flex-col lg:flex-row">
       <Toast toasts={toasts} onDismiss={dismissToast} />
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        keys={userKeys}
+        onKeysChange={setUserKeys}
+      />
 
       {/* History sidebar */}
       <Sidebar
@@ -250,6 +284,8 @@ export default function Home() {
           model={model}
           onModelChange={setModel}
           onMenuClick={() => setSidebarOpen(true)}
+          onSettingsClick={() => setSettingsOpen(true)}
+          keyStatus={keyStatus}
         />
       </div>
 
