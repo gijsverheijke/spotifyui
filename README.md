@@ -4,7 +4,7 @@ A proof-of-concept where you explore your Spotify data through natural language.
 
 Ask about your top artists and get an image grid. Ask about listening history and get a timeline. Ask to create a playlist and get a track list builder. The AI decides the layout, not a template.
 
-**[Try it →](https://spotifyui.vercel.app)**
+**[Try it →](https://spotifyui-iota.vercel.app)**
 
 ## How it works
 
