@@ -44,7 +44,7 @@ export class MinimaxProvider implements AIProvider {
 
   constructor(
     apiKey: string = process.env.MINIMAX_API_KEY ?? "",
-    model: string = "MiniMax-M1",
+    model: string = "MiniMax-M2.7-highspeed",
   ) {
     this.apiKey = apiKey;
     this.model = model;
