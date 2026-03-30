@@ -2,6 +2,17 @@
 
 import { useState, useRef, useEffect } from 'react'
 
+function ElapsedTime() {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    const start = Date.now()
+    const interval = setInterval(() => setSeconds(Math.floor((Date.now() - start) / 1000)), 1000)
+    return () => clearInterval(interval)
+  }, [])
+  if (seconds < 2) return null
+  return <p className="text-xs text-zinc-600 mt-1">{seconds}s</p>
+}
+
 export interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -209,6 +220,7 @@ export default function Chat({
                         {step}
                       </p>
                     ))}
+                    <ElapsedTime />
                   </div>
                 )}
               </div>

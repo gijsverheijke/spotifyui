@@ -53,6 +53,11 @@ export class Orchestrator {
     const toolDefs = this.tools.map((t) => t.definition);
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      onEvent?.({
+        type: "generating",
+        content: round === 0 ? "Analyzing your request..." : "Thinking about what else to fetch...",
+      });
+
       const response = await this.provider.chat(
         messages,
         toolDefs,
@@ -64,7 +69,7 @@ export class Orchestrator {
         const toolNames = response.toolCalls.map((tc) => tc.name).join(", ");
         onEvent?.({
           type: "tool_call",
-          content: `Calling ${toolNames}...`,
+          content: `Fetching: ${toolNames.replace(/_/g, " ")}`,
         });
 
         // Add assistant message with tool calls
@@ -83,15 +88,16 @@ export class Orchestrator {
           toolResults,
         });
 
+        const summaries = toolResults.map((r) => summarizeToolResult(r.content));
         onEvent?.({
           type: "tool_result",
-          content: `Got results from ${toolNames}`,
+          content: summaries.join(" · "),
         });
       } else {
         // Final text response — extract HTML
         onEvent?.({
           type: "generating",
-          content: "Building your page...",
+          content: "Designing your page...",
         });
 
         messages.push({
@@ -141,6 +147,23 @@ export class Orchestrator {
     return results;
   }
 
+}
+
+function summarizeToolResult(content: string): string {
+  try {
+    const data = JSON.parse(content);
+    if (data.error) return `Error: ${data.error}`;
+    if (data.items && Array.isArray(data.items)) {
+      const names = data.items.slice(0, 3).map((i: Record<string, unknown>) => i.name || i.title || "?").join(", ");
+      const more = data.items.length > 3 ? ` +${data.items.length - 3} more` : "";
+      return `${data.items.length} results: ${names}${more}`;
+    }
+    if (data.name) return data.name;
+    if (data.total !== undefined) return `${data.total} items`;
+    return "Done";
+  } catch {
+    return "Done";
+  }
 }
 
 export function extractHtml(text: string): string | null {
