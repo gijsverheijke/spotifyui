@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spotify Generative UI
 
-## Getting Started
+A proof-of-concept where you explore your Spotify data through natural language. Instead of static dashboards, an AI generates custom, interactive web pages on the fly for each query.
 
-First, run the development server:
+Ask about your top artists and get an image grid. Ask about listening history and get a timeline. Ask to create a playlist and get a track list builder. The AI decides the layout, not a template.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+**[Try it →](https://spotifyui.vercel.app)**
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## How it works
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Paste your Spotify `sp_dc` browser cookie to connect
+2. Ask questions about your music
+3. Get a custom-designed page for each answer
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Privacy & API Keys
 
-## Learn More
+**No data is stored by us.** Your Spotify session lives in an encrypted cookie in your browser and is never persisted server-side.
 
-To learn more about Next.js, take a look at the following resources:
+| What | Where it lives | Details |
+|------|---------------|---------|
+| Spotify `sp_dc` cookie | Your browser (encrypted session cookie) | You grab this from your own browser. We validate it, use it to fetch your data, and that's it. |
+| MiniMax AI | Server | A shared key is provided for up to **5 runs per day**. After that, bring your own. |
+| Bring Your Own Key | Your browser (localStorage) | You can add your own MiniMax or Anthropic API key in Settings. It's stored in your browser only and sent per-request. Bypasses the daily limit. |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Credits
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Spotify API integration inspired by [spogo](https://github.com/steipete/spogo) by [@steipete](https://github.com/steipete).
 
-## Deploy on Vercel
+## Tech Stack
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Next.js 15 · React 19 · Tailwind CSS · Anthropic Claude / MiniMax
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT
