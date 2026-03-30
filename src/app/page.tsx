@@ -135,6 +135,9 @@ export default function Home() {
           return
         }
         const data = await res.json().catch(() => null)
+        if (res.status === 429) {
+          throw new Error(data?.error ?? 'Rate limit exceeded. Try again later.')
+        }
         throw new Error(data?.error ?? 'Something went wrong')
       }
 

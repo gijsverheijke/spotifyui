@@ -3,6 +3,7 @@ import { MinimaxProvider } from "@/lib/ai/providers/minimax";
 import { Orchestrator, type ToolHandler, type StreamEvent } from "@/lib/ai/orchestrator";
 import { getSession } from "@/lib/auth/session";
 import { executeTool, spotifyTools } from "@/lib/spotify/tools";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 type ChatModel = "minimax" | "anthropic";
 
@@ -84,6 +85,14 @@ export async function POST(request: Request): Promise<Response> {
   const session = getSession(sessionId);
   if (!session) {
     return jsonError(401, "Invalid session");
+  }
+
+  const rl = checkRateLimit();
+  if (!rl.allowed) {
+    return jsonError(
+      429,
+      `Daily limit reached (${rl.used}/${rl.limit}). Add your own API key in settings to continue.`,
+    );
   }
 
   const encoder = new TextEncoder();
