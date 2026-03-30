@@ -144,6 +144,12 @@ export class Orchestrator {
 
 export function extractHtml(text: string): string | null {
   // Match ```html ... ``` code blocks
-  const match = text.match(/```html\s*\n([\s\S]*?)```/);
-  return match ? match[1].trim() : null;
+  const codeBlock = text.match(/```html\s*\n([\s\S]*?)```/);
+  if (codeBlock) return codeBlock[1].trim();
+
+  // Match raw HTML (model didn't wrap in code block)
+  const rawHtml = text.match(/(<!DOCTYPE\s+html[\s\S]*|<html[\s\S]*<\/html>)/i);
+  if (rawHtml) return rawHtml[1].trim();
+
+  return null;
 }

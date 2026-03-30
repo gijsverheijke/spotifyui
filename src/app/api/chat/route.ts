@@ -45,7 +45,9 @@ function buildToolHandlers(): ToolHandler[] {
 }
 
 function getAssistantMessage(content: string, html: string | null): string {
-  const text = content.replace(/```html\s*[\s\S]*?```/g, "").trim();
+  let text = content.replace(/```html\s*[\s\S]*?```/g, "").trim();
+  // Also strip raw HTML that wasn't in a code block
+  text = text.replace(/(<!DOCTYPE\s+html[\s\S]*|<html[\s\S]*<\/html>)/i, "").trim();
   if (text) {
     return text;
   }
