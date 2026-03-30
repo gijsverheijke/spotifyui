@@ -22,6 +22,7 @@ function createMockClient(overrides?: Partial<SpotifyClient>): SpotifyClient {
     getTracks: vi.fn().mockResolvedValue({ tracks: [] }),
     getArtists: vi.fn().mockResolvedValue({ artists: [] }),
     getAlbum: vi.fn().mockResolvedValue({ id: "alb1", name: "Album" }),
+    createPlaylist: vi.fn().mockResolvedValue({ id: "pl-new", name: "New Playlist" }),
     ...overrides,
   };
 }
@@ -32,7 +33,7 @@ function createMockClient(overrides?: Partial<SpotifyClient>): SpotifyClient {
 
 describe("spotifyTools definitions", () => {
   it("exports exactly 12 tools", () => {
-    expect(spotifyTools).toHaveLength(12);
+    expect(spotifyTools).toHaveLength(13);
   });
 
   it("every tool has name, description, and input_schema", () => {

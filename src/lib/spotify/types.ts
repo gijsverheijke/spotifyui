@@ -260,4 +260,5 @@ export interface SpotifyClient {
   getTracks(ids: string[]): Promise<unknown>;
   getArtists(ids: string[]): Promise<unknown>;
   getAlbum(albumId: string): Promise<unknown>;
+  createPlaylist(name: string, description?: string, trackUris?: string[]): Promise<unknown>;
 }

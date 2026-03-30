@@ -148,7 +148,7 @@ export default function Chat({
                 {[
                   'Show me my top artists',
                   'What have I been listening to?',
-                  'Analyze my music taste',
+                  'Create a playlist for focus time',
                 ].map((suggestion) => (
                   <button
                     key={suggestion}
