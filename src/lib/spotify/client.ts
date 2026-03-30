@@ -140,8 +140,6 @@ export class SpotifyApiClient implements SpotifyClient {
       totpServer: code,
     });
     const url = `${SPOTIFY_TOKEN_BASE}api/token?${params}`;
-    console.log(`[spotify] fetchToken: calling ${url.split("?")[0]}...`);
-    const t1 = Date.now();
     const resp = await fetch(url, {
       method: "GET",
       headers: {
@@ -162,12 +160,7 @@ export class SpotifyApiClient implements SpotifyClient {
       },
       signal: AbortSignal.timeout(15_000),
     });
-    console.log(
-      `[spotify] fetchToken: response ${resp.status} in ${Date.now() - t1}ms`,
-    );
     if (!resp.ok) {
-      const body = await resp.text().catch(() => "");
-      console.log(`[spotify] fetchToken: error body: ${body.slice(0, 200)}`);
       throw new Error(`Token request failed: HTTP ${resp.status}`);
     }
     const data: SpotifyTokenResponse = await resp.json();
@@ -217,7 +210,6 @@ export class SpotifyApiClient implements SpotifyClient {
         },
       );
       if (!resp.ok) {
-        console.log(`[spotify] clienttoken: HTTP ${resp.status}`);
         return null;
       }
       const data = (await resp.json()) as {
@@ -228,12 +220,8 @@ export class SpotifyApiClient implements SpotifyClient {
       const expiresIn = data.granted_token?.expires_in ?? 1800;
       this.clientToken = token;
       this.clientTokenExpiresAt = Date.now() + expiresIn * 1000;
-      console.log(
-        `[spotify] clienttoken: obtained (expires in ${expiresIn}s)`,
-      );
       return token;
-    } catch (err) {
-      console.log(`[spotify] clienttoken: failed`, err);
+    } catch {
       return null;
     }
   }

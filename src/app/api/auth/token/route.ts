@@ -27,15 +27,10 @@ export async function POST(request: Request): Promise<Response> {
   // Validate the cookie by getting an access token (fast, <1s)
   const client = new SpotifyApiClient(spDc);
   try {
-    console.log("[auth] exchanging sp_dc for access token...");
-    const t0 = Date.now();
     await client.getAccessToken();
-    console.log(`[auth] token obtained in ${Date.now() - t0}ms`);
-  } catch (err) {
-    console.log("[auth] token exchange failed:", err);
-    const message = err instanceof Error ? err.message : "Unknown error";
+  } catch {
     return Response.json(
-      { error: "Invalid Spotify cookie", detail: message },
+      { error: "Invalid Spotify cookie" },
       { status: 401 },
     );
   }
@@ -46,7 +41,6 @@ export async function POST(request: Request): Promise<Response> {
   let displayName = "Spotify User";
   let avatar: string | undefined;
   try {
-    console.log("[auth] fetching profile via pathfinder...");
     const profile = (await client.getUserProfile()) as SpotifyUser;
     displayName = profile.display_name ?? displayName;
     avatar = profile.images?.[0]?.url;
@@ -54,9 +48,8 @@ export async function POST(request: Request): Promise<Response> {
     if (session) {
       session.profile = profile;
     }
-    console.log(`[auth] profile: ${displayName}`);
-  } catch (err) {
-    console.log("[auth] profile fetch failed (non-fatal):", err);
+  } catch {
+    // Profile fetch is non-fatal — continue with defaults
   }
 
   return Response.json({

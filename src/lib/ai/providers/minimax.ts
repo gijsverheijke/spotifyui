@@ -87,8 +87,7 @@ export class MinimaxProvider implements AIProvider {
     }
 
     const data = await response.json();
-    console.log("[minimax] response:", JSON.stringify(data).slice(0, 500));
-    
+
     // MiniMax returns base_resp on error even with HTTP 200
     const baseResp = (data as Record<string, unknown>).base_resp as { status_code?: number; status_msg?: string } | undefined;
     if (baseResp && baseResp.status_code && baseResp.status_code !== 0) {

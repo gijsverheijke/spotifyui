@@ -68,7 +68,7 @@ export class HashResolver {
 
     const fallback = FALLBACK_HASHES[operation];
     if (fallback) {
-      console.log(`[pathfinder] using fallback hash for ${operation}`);
+      // Using fallback hash
       return fallback;
     }
 
@@ -86,15 +86,11 @@ export class HashResolver {
     try {
       const html = await fetchText("https://open.spotify.com/");
       const bundleUrl = pickWebPlayerBundle(html);
-      if (!bundleUrl) {
-        console.log("[pathfinder] no web player bundle found in HTML");
-        return;
-      }
+      if (!bundleUrl) return;
 
       const bundleBase =
         bundleUrl.substring(0, bundleUrl.lastIndexOf("/") + 1);
       const mainBody = await fetchText(bundleUrl);
-
       const found = findOperationHashes(mainBody, allOps);
       for (const [op, hash] of Object.entries(found)) {
         this.hashes.set(op, hash);
@@ -118,13 +114,8 @@ export class HashResolver {
         }
       }
 
-      if (missing.length > 0) {
-        console.log(
-          `[pathfinder] could not resolve hashes for: ${missing.join(", ")}`,
-        );
-      }
-    } catch (err) {
-      console.log("[pathfinder] hash resolution failed:", err);
+    } catch {
+      // Hash resolution failed — will fall back to hardcoded hashes
     }
   }
 }
@@ -305,16 +296,11 @@ export async function pathfinderQuery(
     headers["Client-Token"] = auth.clientToken;
   }
 
-  console.log(`[pathfinder] ${operation}`);
-  const t0 = Date.now();
   const resp = await fetch(url, {
     method: "POST",
     headers,
     signal: AbortSignal.timeout(15_000),
   });
-  console.log(
-    `[pathfinder] ${operation}: ${resp.status} in ${Date.now() - t0}ms`,
-  );
 
   if (resp.status === 401) {
     throw new PathfinderAuthError("Unauthorized");
